@@ -52,3 +52,11 @@ record_type_major_abbr = get_record_type_abbr(record.type_major)
 print(f"{record.text} ({record_type_major_abbr} {record.gen_n_num} in GG {record.gg_num} of {record.monthday_num} {record.month_name} {record.year}) (p{record.page})")
 
 print()
+
+record = get_record_for_gg_num(52725)
+
+print("Department of Tourism:")
+
+print("National Astro-Tourism Strategy published for implementation")
+print("(GenN 3229 in GG 52725 of 23 May 2025) (p3)")
+

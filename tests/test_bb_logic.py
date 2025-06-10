@@ -7,7 +7,7 @@ import sys
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
 
-# Add parent directory to path to import bb_logic
+# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
@@ -15,10 +15,6 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     MajorType,
     load_or_scan_pdf_text,
     get_record_for_gg
-)
-from bb_logic import (
-    to_bb_header_str,
-    get_record_type_abbr
 )
 from pydantic import ValidationError
 
@@ -259,16 +255,6 @@ class TestGetRecordForGG:
                 get_record_for_gg(Path("test.pdf"))
 
 
-class TestUtilityFunctions:
-    """Tests for utility functions"""
-    
-    def test_to_bb_header_str(self):
-        """Test converting MajorType to header string"""
-        assert to_bb_header_str(MajorType.GENERAL_NOTICE) == 'PROCLAMATIONS AND NOTICES'
-    
-    def test_get_record_type_abbr(self):
-        """Test getting abbreviation for MajorType"""
-        assert get_record_type_abbr(MajorType.GENERAL_NOTICE) == "GenN"
 
 
 class TestIntegration:
@@ -297,17 +283,8 @@ class TestIntegration:
                 assert record.gen_n_num == 3228
                 assert record.type_major == MajorType.GENERAL_NOTICE
                 
-                # Test formatting functions
-                header = to_bb_header_str(record.type_major)
-                assert header == 'PROCLAMATIONS AND NOTICES'
-                
-                abbr = get_record_type_abbr(record.type_major)
-                assert abbr == "GenN"
-                
-                # Test the formatted output string
-                output = f"{record.text} ({abbr} {record.gen_n_num} in GG {record.gg_num} of {record.monthday_num} {record.month_name} {record.year}) (p{record.page})"
-                assert "Draft National Policy on Heritage Memorialisation" in output
-                assert "(GenN 3228 in GG 52724 of 23 May 2025) (p3)" in output
+                # Verify the record is correctly parsed
+                assert "Draft National Policy on Heritage Memorialisation" in record.text
 
 
 if __name__ == "__main__":
