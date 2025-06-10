@@ -316,7 +316,7 @@ class TesseractEngine(OCREngine):
 class EasyOCREngine(OCREngine):
     """EasyOCR engine implementation with GPU support."""
 
-    def __init__(self, languages: List[str] = None, gpu: bool = True):
+    def __init__(self, languages: Optional[List[str]] = None, gpu: bool = True):
         if not EASYOCR_AVAILABLE:
             raise ImportError("easyocr not available. Install with: pip install easyocr torch")
 
@@ -359,7 +359,7 @@ def extract_pdf_text(
     output_folder: Optional[str] = None,
     max_workers: int = 1,
     progress_bar: bool = True,
-    **kwargs
+    **kwargs: Any
 ) -> List[Tuple[int, str, float]]:
     """
     Extract text from PDF using advanced OCR with image optimization.
@@ -432,7 +432,7 @@ def extract_pdf_text(
         iterator = page_image_pairs
 
         if progress_bar and TQDM_AVAILABLE:
-            iterator = tqdm(page_image_pairs, desc="Processing pages")
+            iterator = list(tqdm(page_image_pairs, desc="Processing pages"))
 
         for page_num, image in iterator:
             start_time = time.time()
@@ -479,7 +479,7 @@ def extract_pdf_text(
             torch.cuda.empty_cache()
 
 
-def _get_ocr_engine(engine: str, **kwargs) -> OCREngine:
+def _get_ocr_engine(engine: str, **kwargs: Any) -> OCREngine:
     """Get the appropriate OCR engine based on availability and preference."""
     if engine == "auto":
         # Prefer EasyOCR if available and GPU is present
@@ -506,7 +506,7 @@ def _get_ocr_engine(engine: str, **kwargs) -> OCREngine:
         raise ValueError(f"Unknown OCR engine: {engine}. Use 'auto', 'tesseract', or 'easyocr'")
 
 
-def main():
+def main() -> None:
     """Command line interface for the OCR module."""
     parser = argparse.ArgumentParser(description="Extract text from PDF using advanced OCR")
     parser.add_argument("pdf_path", help="Path to PDF file")

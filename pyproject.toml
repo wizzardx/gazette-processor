@@ -23,6 +23,7 @@ dependencies = [
     "easyocr>=1.7.2",
     "pydantic>=2.11.5",
     "pytest-cov>=6.1.1",
+    "mypy>=1.16.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -33,10 +34,21 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = []
+dev-dependencies = [
+    "scipy-stubs>=1.15.3.0",
+    "types-colorama>=0.4.15.20240311",
+    "types-defusedxml>=0.7.0.20250516",
+    "types-networkx>=3.5.0.20250610",
+    "types-protobuf>=6.30.2.20250516",
+    "types-tabulate>=0.9.0.20241207",
+    "types-tqdm>=4.67.0.20250516",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ongoing_convo_with_bronn_2025_06_10"]
+
+[tool.mypy]
+mypy_path = "stubs"

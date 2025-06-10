@@ -4,10 +4,10 @@ from typeguard import typechecked
 from icecream import ic
 from pathlib import Path
 
-from src.ongoing_convo_with_bronn_2025_06_10.utils import get_record_for_gg, MajorType
+from src.ongoing_convo_with_bronn_2025_06_10.utils import get_record_for_gg_num, MajorType
 
 
-record = get_record_for_gg(Path("gg52724_23May2025.pdf"))
+record = get_record_for_gg_num(52724)
 
 print("JUTA'S WEEKLY STATUTES BULLETIN")
 print()

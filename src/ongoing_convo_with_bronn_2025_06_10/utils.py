@@ -59,11 +59,29 @@ def load_or_scan_pdf_text(p: Path) -> list[tuple[int, str]]:
         return [(page_num, text) for page_num, text, _ in ocr_results]
 
 
-@typechecked
-def get_record_for_gg(gg_filename: Path) -> Record:
-    # Build path to the file:
-    p = Path("inputs") / gg_filename
+GG_DIR = Path('/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/')
 
+
+@typechecked
+def locate_gg_pdf_by_number(gg_number: int) -> Path:
+    gg_s = str(gg_number)
+    result = None
+    for p in GG_DIR.iterdir():
+        if gg_s in p.name:
+            assert result is None
+            result = p
+    assert result is not None
+    return result
+
+
+@typechecked
+def get_record_for_gg_num(gg_number: int) -> Record:
+    p = locate_gg_pdf_by_number(gg_number)
+    return get_record_for_gg(p)
+
+
+@typechecked
+def get_record_for_gg(p: Path) -> Record:
     # Grab all text from the PDF file:
     pdf_text_list = load_or_scan_pdf_text(p)
     
@@ -244,8 +262,14 @@ def get_record_for_gg(gg_filename: Path) -> Record:
         else:
             continue
 
-    pdf_text = ' '.join(words_to_use)
+    pdf_text_content = ' '.join(words_to_use)
 
+    # Ensure all required fields are not None
+    if pdf_gen_n_num is None:
+        raise ValueError("Could not find gen_n_num in PDF")
+    if pdf_page_num is None:
+        raise ValueError("Could not find page number in PDF")
+    
     return Record(
         gen_n_num = pdf_gen_n_num,
         gg_num = pdf_gg_num,
@@ -256,5 +280,5 @@ def get_record_for_gg(gg_filename: Path) -> Record:
         issn_num = pdf_issn_num,
         type_major = pdf_type_major,
         type_minor = pdf_type_minor,
-        text = pdf_text,
+        text = pdf_text_content,
     )
