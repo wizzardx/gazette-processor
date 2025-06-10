@@ -52,3 +52,33 @@ packages = ["src/ongoing_convo_with_bronn_2025_06_10"]
 
 [tool.mypy]
 mypy_path = "stubs"
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/site-packages/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]
+show_missing = true
+skip_covered = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--cov",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--strict-markers",
+]
