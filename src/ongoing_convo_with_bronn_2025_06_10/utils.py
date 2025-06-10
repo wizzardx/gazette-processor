@@ -17,6 +17,7 @@ from enhanced_ocr import extract_pdf_text
 from validation_helpers import StrictBaseModel
 
 
+# TODO: Rename Record to Notice
 class Record(StrictBaseModel):
     gen_n_num: int
     gg_num: int
@@ -32,6 +33,7 @@ class Record(StrictBaseModel):
 
 class MajorType(Enum):
     GENERAL_NOTICE = "GENERAL_NOTICE"
+    GOVERNMENT_NOTICE = "GOVERNMENT_NOTICE"
 
 
 @typechecked
@@ -95,6 +97,39 @@ def looks_like_a_year_string(s: str) -> bool:
         return False
     year = int(s)
     return 1900 <= year <= 2100
+
+
+@typechecked
+def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
+    # ic(locals())
+    # eg:
+    #
+    # ic| locals(): {'TypeCheckMemo': <class 'typeguard.TypeCheckMemo'>,
+    #                'check_argument_types': <function check_argument_types at 0x7fbd05870900>,
+    #                'check_return_type': <function check_return_type at 0x7fbd058709a0>,
+    #                'memo': <typeguard.TypeCheckMemo object at 0x7fbbdd627140>,
+    #                'page_text_lower': 'staatskoerant; 23 mei-2025 no; 52726 3 government notices '
+    #                                   'goewermentskennisgewings department of transport no. 6220 '
+    #                                   '23 2025 draft comprehensive civil aviation policy the '
+    #                                   'comments: interested persons are   requested to   submit '
+    #                                   'written   comments in connection with-the draft '
+    #                                   'comprehensive civil aviation policy within 30.days from '
+    #                                   'the date of publication of this notice in the government '
+    #                                   'gazette. all comments should be posted or emailed to the '
+    #                                   'director- general of the department-of transport for the '
+    #                                   'attention-of ms. johannah sekele as follows: department '
+    #                                   'of transport private bag x 193 pretoria 0001 email: '
+    #                                   'sekelej@dot_govza and tholot@dotgovza tel: 012 309 3760 '
+    #                                   'may',
+    #                'pdf_gg_num': 52726}
+    # Traceback (most recent call last):
+    page_split = page_text_lower.split()
+
+    # We expect the word at index 4 to match the GG number:
+    assert page_split[4] == str(pdf_gg_num)
+
+    # And assuming it does, then in theory we have our page number next:
+    return int(page_split[5])
 
 
 @typechecked
@@ -243,9 +278,10 @@ def get_record_for_gg(p: Path) -> Record:
 
     # In page 3 we can determine a few useful things, starting with what I call the "major type", eg "PROCLAMATIONS" or "NOTICES"
     page3_text_lower = pdf_text[3].lower()
-    match = "general notice"
-    if match in page3_text_lower:
+    if "general notice" in page3_text_lower:
         pdf_type_major = MajorType.GENERAL_NOTICE
+    elif "government notice" in page3_text_lower:
+        pdf_type_major = MajorType.GOVERNMENT_NOTICE
     else:
         ic(page3_text_lower)
         raise ValueError(
@@ -257,6 +293,8 @@ def get_record_for_gg(p: Path) -> Record:
         pdf_type_minor = "Department of Sports, Arts and Culture"
     elif "national astro-tourism" in page3_text_lower:
         pdf_type_minor = "Department of Tourism"
+    elif "department of transport" in page3_text_lower:
+        pdf_type_minor = "Department of Transport"
     else:
         ic(page3_text_lower)
         assert 0
@@ -292,11 +330,31 @@ def get_record_for_gg(p: Path) -> Record:
             continue
 
     pdf_text_content = " ".join(words_to_use)
+    # Also in PDF Page 3: if we don't have the Notice's Page Number yet, then
+    # then we can sometimes find it there. eg:
+
+    # 3: 'STAATSKOERANT; 23 MEI-2025 No; 52726 3 GovERNMENT NoTICES '
+    #    'GoEWERMENTSKENNISGEWINGS DEPARTMENT OF TRANSPORT NO. 6220 23 2025 DRAFT '
+    #    'COMPREHENSIVE CIVIL AVIATION POLICY The comments: Interested persons '
+    #    'are   requested to   submit written   comments in connection with-the '
+    #    'Draft Comprehensive Civil Aviation Policy within 30.days from the date of '
+    #    'publication of this notice in the Government Gazette. All comments should '
+    #    'be posted or emailed to the Director- General of the Department-of '
+    #    'Transport for the attention-of Ms. Johannah Sekele as follows: Department '
+    #    'of Transport Private Bag X 193 Pretoria 0001 Email: SekeleJ@dot_govza and '
+    #    'TholoT@dotgovza Tel: 012 309 3760 May',
+
+    if pdf_page_num is None:
+        pdf_page_num = attempt_to_get_pdf_page_num(
+            pdf_gg_num=pdf_gg_num, page_text_lower=page3_text_lower
+        )
 
     # Ensure all required fields are not None
     if pdf_gen_n_num is None:
+        ic(pdf_text)
         raise ValueError("Could not find gen_n_num in PDF")
     if pdf_page_num is None:
+        ic(pdf_text)
         raise ValueError("Could not find page number in PDF")
 
     return Record(

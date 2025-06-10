@@ -46,7 +46,8 @@ print()
 
 @typechecked
 def get_record_type_abbr(t: MajorType) -> str:
-    return {MajorType.GENERAL_NOTICE: "GenN"}[t]
+    ic(t)
+    return {MajorType.GENERAL_NOTICE: "GenN", MajorType.GOVERNMENT_NOTICE: "GN"}[t]
 
 
 record_type_major_abbr = get_record_type_abbr(record.type_major)
@@ -57,9 +58,28 @@ print(
 
 print()
 
-record = get_record_for_gg_num(52725)
 
-print("Department of Tourism:")
+@typechecked
+def print_record_info(gg_num: int) -> None:
+    record = get_record_for_gg_num(gg_num)
+    record_type_major_abbr = get_record_type_abbr(record.type_major)
+    # print("Department of Tourism:")
 
-print("National Astro-Tourism Strategy published for implementation")
-print("(GenN 3229 in GG 52725 of 23 May 2025) (p3)")
+    # print("Department of Sports, Arts and Culture:")
+    print(f"{record.type_minor}:")
+    print()
+
+    # print("National Astro-Tourism Strategy published for implementation")
+
+    print(
+        f"{record.text}\n({record_type_major_abbr} {record.gen_n_num} in GG {record.gg_num} of {record.monthday_num} {record.month_name} {record.year}) (p{record.page})"
+    )
+
+    print()
+
+
+print_record_info(52725)  # Department of Tourism
+print_record_info(52726)  # Department of Transport
+
+# CURRENCY AND EXCHANGES ACT 9 OF 1933
+# print_record_info(52695)
