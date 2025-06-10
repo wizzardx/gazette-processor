@@ -1,6 +1,7 @@
-from typing import Any, Optional, Union, List, Tuple
-from PIL.Image import Image
+from typing import Any, List, Optional, Tuple, Union
+
 import numpy as np
+from PIL.Image import Image
 
 class Reader:
     def __init__(
@@ -16,7 +17,6 @@ class Reader:
         quantize: bool = True,
         cudnn_benchmark: bool = False,
     ) -> None: ...
-    
     def readtext(
         self,
         image: Union[str, np.ndarray, Image],

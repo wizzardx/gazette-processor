@@ -1,17 +1,22 @@
 #!/bin/env python
 
-from typeguard import typechecked
-from icecream import ic
 from pathlib import Path
 
-from src.ongoing_convo_with_bronn_2025_06_10.utils import get_record_for_gg_num, MajorType
+from icecream import ic
+from typeguard import typechecked
 
+from src.ongoing_convo_with_bronn_2025_06_10.utils import (
+    MajorType,
+    get_record_for_gg_num,
+)
 
 record = get_record_for_gg_num(52724)
 
 print("JUTA'S WEEKLY STATUTES BULLETIN")
 print()
-print("(Bulletin 21 of 2025 based on Gazettes received during the week 16 to 23 May 2025)")
+print(
+    "(Bulletin 21 of 2025 based on Gazettes received during the week 16 to 23 May 2025)"
+)
 print()
 print("JUTA'S WEEKLY E-MAIL SERVICE")
 print()
@@ -22,11 +27,10 @@ print()
 
 print(f"ISSN {record.issn_num}")
 
+
 @typechecked
 def to_bb_header_str(t: MajorType) -> str:
-    return {
-        MajorType.GENERAL_NOTICE: 'PROCLAMATIONS AND NOTICES'
-    }[t]
+    return {MajorType.GENERAL_NOTICE: "PROCLAMATIONS AND NOTICES"}[t]
 
 
 print()
@@ -34,7 +38,7 @@ print()
 print(to_bb_header_str(record.type_major))
 print()
 # print("Department of Sports, Arts and Culture:")
-print(f'{record.type_minor}:')
+print(f"{record.type_minor}:")
 print()
 
 # print(f"Draft National Policy Framework for Heritage Memorialisation published for comment (GenN 3228 in GG 52724 of 23 May 2025) (p3)")
@@ -42,14 +46,14 @@ print()
 
 @typechecked
 def get_record_type_abbr(t: MajorType) -> str:
-    return {
-        MajorType.GENERAL_NOTICE: "GenN"
-    }[t]
+    return {MajorType.GENERAL_NOTICE: "GenN"}[t]
 
 
 record_type_major_abbr = get_record_type_abbr(record.type_major)
 
-print(f"{record.text} ({record_type_major_abbr} {record.gen_n_num} in GG {record.gg_num} of {record.monthday_num} {record.month_name} {record.year}) (p{record.page})")
+print(
+    f"{record.text} ({record_type_major_abbr} {record.gen_n_num} in GG {record.gg_num} of {record.monthday_num} {record.month_name} {record.year}) (p{record.page})"
+)
 
 print()
 
@@ -59,4 +63,3 @@ print("Department of Tourism:")
 
 print("National Astro-Tourism Strategy published for implementation")
 print("(GenN 3229 in GG 52725 of 23 May 2025) (p3)")
-

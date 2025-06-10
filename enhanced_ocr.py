@@ -70,22 +70,23 @@ Installation:
     pip install pdf2image Pillow opencv-python numpy pytesseract easyocr torch tqdm
 """
 
+import argparse
 import gc
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-import argparse
-import sys
 
 # Core dependencies
 try:
-    from pdf2image import convert_from_path
-    from PIL import Image, ImageEnhance, ImageFilter, ImageStat
     import cv2
     import numpy as np
+    from pdf2image import convert_from_path
+    from PIL import Image, ImageEnhance, ImageFilter, ImageStat
+
     PDF_AVAILABLE = True
 except ImportError as e:
     PDF_AVAILABLE = False
@@ -94,6 +95,7 @@ except ImportError as e:
 # Optional dependencies
 try:
     import pytesseract
+
     TESSERACT_AVAILABLE = True
 except ImportError:
     TESSERACT_AVAILABLE = False
@@ -101,12 +103,14 @@ except ImportError:
 try:
     import easyocr
     import torch
+
     EASYOCR_AVAILABLE = True
 except ImportError:
     EASYOCR_AVAILABLE = False
 
 try:
     from tqdm import tqdm
+
     TQDM_AVAILABLE = True
 except ImportError:
     TQDM_AVAILABLE = False
@@ -183,16 +187,34 @@ class ImageOptimizer:
 
                 # Advanced adaptive thresholding
                 thresh_methods = [
-                    cv2.adaptiveThreshold(cleaned, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2),
-                    cv2.adaptiveThreshold(cleaned, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2),
+                    cv2.adaptiveThreshold(
+                        cleaned,
+                        255,
+                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv2.THRESH_BINARY,
+                        11,
+                        2,
+                    ),
+                    cv2.adaptiveThreshold(
+                        cleaned,
+                        255,
+                        cv2.ADAPTIVE_THRESH_MEAN_C,
+                        cv2.THRESH_BINARY,
+                        11,
+                        2,
+                    ),
                 ]
 
                 # Choose best thresholding result
-                best_thresh = ImageOptimizer._select_best_threshold(thresh_methods, cleaned)
+                best_thresh = ImageOptimizer._select_best_threshold(
+                    thresh_methods, cleaned
+                )
 
                 # Final morphological cleanup
                 final_kernel = np.ones((1, 1), np.uint8)
-                final_processed = cv2.morphologyEx(best_thresh, cv2.MORPH_OPEN, final_kernel)
+                final_processed = cv2.morphologyEx(
+                    best_thresh, cv2.MORPH_OPEN, final_kernel
+                )
 
                 # Convert back to PIL Image
                 image = Image.fromarray(final_processed)
@@ -202,12 +224,16 @@ class ImageOptimizer:
                     image = image.convert("RGB")
 
             except Exception as cv_error:
-                logger.warning(f"OpenCV processing failed, using PIL fallback: {cv_error}")
+                logger.warning(
+                    f"OpenCV processing failed, using PIL fallback: {cv_error}"
+                )
                 image = ImageOptimizer._fallback_pil_optimization(image)
 
             # Step 4: Final sharpening for text clarity
             try:
-                sharpening_filter = ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3)
+                sharpening_filter = ImageFilter.UnsharpMask(
+                    radius=1, percent=150, threshold=3
+                )
                 image = image.filter(sharpening_filter)
             except Exception:
                 pass
@@ -238,7 +264,9 @@ class ImageOptimizer:
             return original_image
 
     @staticmethod
-    def _select_best_threshold(thresh_methods: List[np.ndarray], original: np.ndarray) -> np.ndarray:
+    def _select_best_threshold(
+        thresh_methods: List[np.ndarray], original: np.ndarray
+    ) -> np.ndarray:
         """Select the best thresholding method based on edge preservation and contrast."""
         try:
             best_thresh = thresh_methods[0]
@@ -250,7 +278,9 @@ class ImageOptimizer:
                 edges_thresh = cv2.Canny(thresh, 50, 150)
 
                 # Score based on edge preservation and contrast
-                edge_score = cv2.countNonZero(edges_thresh) / max(cv2.countNonZero(edges_original), 1)
+                edge_score = cv2.countNonZero(edges_thresh) / max(
+                    cv2.countNonZero(edges_original), 1
+                )
                 contrast_score = np.std(thresh) / 255.0
 
                 total_score = edge_score * 0.7 + contrast_score * 0.3
@@ -302,12 +332,16 @@ class TesseractEngine(OCREngine):
         self.config = config
 
         if not TESSERACT_AVAILABLE:
-            raise ImportError("pytesseract not available. Install with: pip install pytesseract")
+            raise ImportError(
+                "pytesseract not available. Install with: pip install pytesseract"
+            )
 
     def extract_text(self, image: Image.Image) -> str:
         """Extract text using Tesseract."""
         try:
-            return pytesseract.image_to_string(image, lang=self.language, config=self.config).strip()
+            return pytesseract.image_to_string(
+                image, lang=self.language, config=self.config
+            ).strip()
         except Exception as e:
             logger.error(f"Tesseract OCR failed: {e}")
             return f"[ERROR: {str(e)}]"
@@ -318,7 +352,9 @@ class EasyOCREngine(OCREngine):
 
     def __init__(self, languages: Optional[List[str]] = None, gpu: bool = True):
         if not EASYOCR_AVAILABLE:
-            raise ImportError("easyocr not available. Install with: pip install easyocr torch")
+            raise ImportError(
+                "easyocr not available. Install with: pip install easyocr torch"
+            )
 
         self.languages = languages or ["en"]
         self.gpu = gpu and torch.cuda.is_available()
@@ -332,16 +368,14 @@ class EasyOCREngine(OCREngine):
 
             # Perform OCR
             results = self.reader.readtext(
-                image_array,
-                detail=1,
-                paragraph=False,
-                width_ths=0.7,
-                height_ths=0.7
+                image_array, detail=1, paragraph=False, width_ths=0.7, height_ths=0.7
             )
 
             # Extract text with confidence filtering
             confidence_threshold = 0.5
-            text = " ".join([item[1] for item in results if item[2] > confidence_threshold])
+            text = " ".join(
+                [item[1] for item in results if item[2] > confidence_threshold]
+            )
 
             return text.strip()
         except Exception as e:
@@ -359,7 +393,7 @@ def extract_pdf_text(
     output_folder: Optional[str] = None,
     max_workers: int = 1,
     progress_bar: bool = True,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> List[Tuple[int, str, float]]:
     """
     Extract text from PDF using advanced OCR with image optimization.
@@ -408,7 +442,7 @@ def extract_pdf_text(
                 dpi=dpi,
                 fmt="jpeg",
                 first_page=min(page_numbers),
-                last_page=max(page_numbers)
+                last_page=max(page_numbers),
             )
             # Filter to only requested pages
             page_offset = min(page_numbers) - 1
@@ -446,7 +480,9 @@ def extract_pdf_text(
 
                 # Save image if requested
                 if save_images and output_folder:
-                    image_path = Path(output_folder) / f"page_{page_num:03d}_optimized.png"
+                    image_path = (
+                        Path(output_folder) / f"page_{page_num:03d}_optimized.png"
+                    )
                     optimized_image.save(image_path, "PNG")
 
                 # Extract text
@@ -473,7 +509,7 @@ def extract_pdf_text(
     finally:
         # Cleanup
         gc.collect()
-        if hasattr(ocr_engine, 'reader') and hasattr(ocr_engine.reader, '__del__'):
+        if hasattr(ocr_engine, "reader") and hasattr(ocr_engine.reader, "__del__"):
             del ocr_engine.reader
         if EASYOCR_AVAILABLE and torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -490,32 +526,50 @@ def _get_ocr_engine(engine: str, **kwargs: Any) -> OCREngine:
             logger.info("Using Tesseract OCR")
             return TesseractEngine(**kwargs)
         else:
-            raise ImportError("No OCR engine available. Install pytesseract or easyocr.")
+            raise ImportError(
+                "No OCR engine available. Install pytesseract or easyocr."
+            )
 
     elif engine.lower() == "tesseract":
         if not TESSERACT_AVAILABLE:
-            raise ImportError("Tesseract not available. Install with: pip install pytesseract")
+            raise ImportError(
+                "Tesseract not available. Install with: pip install pytesseract"
+            )
         return TesseractEngine(**kwargs)
 
     elif engine.lower() == "easyocr":
         if not EASYOCR_AVAILABLE:
-            raise ImportError("EasyOCR not available. Install with: pip install easyocr torch")
+            raise ImportError(
+                "EasyOCR not available. Install with: pip install easyocr torch"
+            )
         return EasyOCREngine(**kwargs)
 
     else:
-        raise ValueError(f"Unknown OCR engine: {engine}. Use 'auto', 'tesseract', or 'easyocr'")
+        raise ValueError(
+            f"Unknown OCR engine: {engine}. Use 'auto', 'tesseract', or 'easyocr'"
+        )
 
 
 def main() -> None:
     """Command line interface for the OCR module."""
-    parser = argparse.ArgumentParser(description="Extract text from PDF using advanced OCR")
+    parser = argparse.ArgumentParser(
+        description="Extract text from PDF using advanced OCR"
+    )
     parser.add_argument("pdf_path", help="Path to PDF file")
     parser.add_argument("--pages", help="Page range (e.g., '1-5' or '1,3,5')")
-    parser.add_argument("--engine", choices=["auto", "tesseract", "easyocr"], default="auto",
-                       help="OCR engine to use")
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "tesseract", "easyocr"],
+        default="auto",
+        help="OCR engine to use",
+    )
     parser.add_argument("--dpi", type=int, default=300, help="DPI for PDF conversion")
-    parser.add_argument("--no-optimize", action="store_true", help="Disable image optimization")
-    parser.add_argument("--save-images", action="store_true", help="Save optimized images")
+    parser.add_argument(
+        "--no-optimize", action="store_true", help="Disable image optimization"
+    )
+    parser.add_argument(
+        "--save-images", action="store_true", help="Save optimized images"
+    )
     parser.add_argument("--output-folder", help="Folder to save images")
     parser.add_argument("--output", help="Output text file")
 
@@ -543,14 +597,16 @@ def main() -> None:
             dpi=args.dpi,
             optimize_images=not args.no_optimize,
             save_images=args.save_images,
-            output_folder=args.output_folder
+            output_folder=args.output_folder,
         )
 
         # Output results
         if args.output:
             with open(args.output, "w", encoding="utf-8") as f:
                 for page_num, text, processing_time in results:
-                    f.write(f"=== Page {page_num} (processed in {processing_time:.2f}s) ===\n")
+                    f.write(
+                        f"=== Page {page_num} (processed in {processing_time:.2f}s) ===\n"
+                    )
                     f.write(text)
                     f.write("\n\n")
             print(f"Text extracted to {args.output}")
