@@ -9,6 +9,10 @@ wheels/
 # venv
 .venv
 
+# coverage
+.coverage
+.coverage.*
+
 cache/
 inputs/
 old/

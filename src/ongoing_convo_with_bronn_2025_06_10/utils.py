@@ -3,6 +3,7 @@ from enum import Enum
 import os
 import json
 import sys
+from pathlib import Path
 
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -29,18 +30,18 @@ class MajorType(Enum):
 
 
 @typechecked
-def load_or_scan_pdf_text(p: str) -> list[tuple[int, str]]:
+def load_or_scan_pdf_text(p: Path) -> list[tuple[int, str]]:
     # Create cache directory if it doesn't exist
     if not os.path.exists("cache"):
         os.makedirs("cache")
     
     # Generate cache filename based on PDF filename
-    pdf_basename = os.path.basename(p)
+    pdf_basename = p.name
     cache_filename = pdf_basename.replace('.pdf', '_ocr_cache.json')
-    cache_fname_path = os.path.join("cache", cache_filename)
+    cache_fname_path = Path("cache") / cache_filename
     
     # Check if cache file exists
-    if os.path.exists(cache_fname_path):
+    if cache_fname_path.exists():
         # Load from cache
         with open(cache_fname_path, 'r') as f:
             cached_data = json.load(f)
@@ -59,10 +60,9 @@ def load_or_scan_pdf_text(p: str) -> list[tuple[int, str]]:
 
 
 @typechecked
-def get_record_for_gg(gg_filename: str) -> Record:
+def get_record_for_gg(gg_filename: Path) -> Record:
     # Build path to the file:
-    import os
-    p = os.path.join("inputs", gg_filename)
+    p = Path("inputs") / gg_filename
 
     # Grab all text from the PDF file:
     pdf_text_list = load_or_scan_pdf_text(p)

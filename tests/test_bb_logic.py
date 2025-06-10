@@ -137,10 +137,10 @@ class TestLoadOrScanPdfText:
             (3, "Page 3 text", 0.99)
         ]
         
-        result = load_or_scan_pdf_text("test.pdf")
+        result = load_or_scan_pdf_text(Path("test.pdf"))
         
         # Check that extract_pdf_text was called
-        mock_extract.assert_called_once_with("test.pdf")
+        mock_extract.assert_called_once_with(Path("test.pdf"))
         
         # Check result format
         assert result == [(1, "Page 1 text"), (2, "Page 2 text"), (3, "Page 3 text")]
@@ -168,7 +168,7 @@ class TestLoadOrScanPdfText:
         with open("cache/test_ocr_cache.json", 'w') as f:
             json.dump(cache_data, f)
         
-        result = load_or_scan_pdf_text("test.pdf")
+        result = load_or_scan_pdf_text(Path("test.pdf"))
         
         # Check that extract_pdf_text was NOT called
         mock_extract.assert_not_called()
@@ -184,7 +184,7 @@ class TestLoadOrScanPdfText:
         # Ensure cache directory doesn't exist
         assert not os.path.exists("cache")
         
-        load_or_scan_pdf_text("test.pdf")
+        load_or_scan_pdf_text(Path("test.pdf"))
         
         # Check cache directory was created
         assert os.path.exists("cache")
@@ -205,7 +205,7 @@ class TestGetRecordForGG:
         
         # Mock file existence
         with patch('os.path.join', return_value="inputs/test.pdf"):
-            record = get_record_for_gg("test.pdf")
+            record = get_record_for_gg(Path("test.pdf"))
         
         # Verify record fields
         assert record.gen_n_num == 3228
@@ -230,7 +230,7 @@ class TestGetRecordForGG:
         
         with patch('os.path.join', return_value="inputs/test.pdf"):
             with pytest.raises(AssertionError):
-                get_record_for_gg("test.pdf")
+                get_record_for_gg(Path("test.pdf"))
     
     @patch('src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text')
     def test_unknown_major_type(self, mock_load_pdf):
@@ -243,7 +243,7 @@ class TestGetRecordForGG:
         
         with patch('os.path.join', return_value="inputs/test.pdf"):
             with pytest.raises(ValueError, match="Unknown major type"):
-                get_record_for_gg("test.pdf")
+                get_record_for_gg(Path("test.pdf"))
     
     @patch('src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text')
     def test_unknown_minor_type(self, mock_load_pdf):
@@ -256,7 +256,7 @@ class TestGetRecordForGG:
         
         with patch('os.path.join', return_value="inputs/test.pdf"):
             with pytest.raises(AssertionError):
-                get_record_for_gg("test.pdf")
+                get_record_for_gg(Path("test.pdf"))
 
 
 class TestUtilityFunctions:
@@ -291,7 +291,7 @@ class TestIntegration:
         
         with patch('os.path.join', return_value="inputs/test.pdf"):
             with patch('builtins.open', mock_open()) as mock_file:
-                record = get_record_for_gg("test.pdf")
+                record = get_record_for_gg(Path("test.pdf"))
                 
                 # Verify the record is correct
                 assert record.gen_n_num == 3228
