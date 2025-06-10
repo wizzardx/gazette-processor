@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from validation_helpers import StrictBaseModel
 from enhanced_ocr import extract_pdf_text
+from icecream import ic
 
 
 class Record(StrictBaseModel):
@@ -81,8 +82,19 @@ def get_record_for_gg_num(gg_number: int) -> Record:
 
 
 @typechecked
+def looks_like_a_year_string(s: str) -> bool:
+    if not s.isdigit():
+        return False
+    if len(s) != 4:
+        return False
+    year = int(s)
+    return 1900 <= year <= 2100
+
+
+@typechecked
 def get_record_for_gg(p: Path) -> Record:
     # Grab all text from the PDF file:
+    ic(p)
     pdf_text_list = load_or_scan_pdf_text(p)
     
     # Convert list to dictionary for easier access by page number
@@ -204,7 +216,10 @@ def get_record_for_gg(p: Path) -> Record:
                 if pdf_gen_n_num is None:
                     pdf_gen_n_num = int(word)
                 elif not gg_num_seen:
-                    # The next number after that is the gg number, eg 52724
+                    # The next number after that is the gg number, eg 52724, or it
+                    # might be a year number
+                    if looks_like_a_year_string(word):
+                        continue
                     assert int(word) == int(pdf_gg_num)
                     gg_num_seen = True
                 elif pdf_page_num is None:
@@ -220,17 +235,21 @@ def get_record_for_gg(p: Path) -> Record:
 
     # In page 3 we can determine a few useful things, starting with what I call the "major type", eg "PROCLAMATIONS" or "NOTICES"
     page3_text_lower = pdf_text[3].lower()
-    match = "general notices algemene kennisgewings"
+    match = "general notice"
     if match in page3_text_lower:
         pdf_type_major = MajorType.GENERAL_NOTICE
     else:
+        ic(page3_text_lower)
         raise ValueError(f"Unknown major type in page 3 text: {page3_text_lower[:100]}...")
 
     # Also something similar to "Department of Sports, Arts and Culture"
     if "department of sports, arts and culture" in page3_text_lower:
         pdf_type_minor = "Department of Sports, Arts and Culture"
+    elif "national astro-tourism" in page3_text_lower:
+        pdf_type_minor = "Department of Tourism"
     else:
-        assert 0, repr(page3_text_lower)
+        ic(page3_text_lower)
+        assert 0
 
     # Now we want something that looks like this:
 
