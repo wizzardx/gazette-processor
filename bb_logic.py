@@ -82,4 +82,7 @@ print_record_info(52725)  # Department of Tourism
 print_record_info(52726)  # Department of Transport
 
 # CURRENCY AND EXCHANGES ACT 9 OF 1933
-# print_record_info(52695)
+print_record_info(52695)
+
+# MAGISTRATES' COURTS ACT 32 OF 1944
+print_record_info(52723)

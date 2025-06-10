@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from enum import Enum
 from pathlib import Path
@@ -129,6 +130,44 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
 
     # And assuming it does, then in theory we have our page number next:
     return int(page_split[5])
+
+
+class Act(StrictBaseModel):
+    whom: str
+    year: int
+    number: int
+
+
+@typechecked
+def decode_complex_pdf_type_minor(page3_text: str) -> Act:
+    # Over here, we work with types of eg:
+    # - ROAD ACCIDENT FUND ACT 56 OF 1996
+    # - SKILLS DEVELOPMENT ACT 97 OF 1998
+    # - COMPETITION ACT 89 OF 1998
+
+    # https://claude.ai/chat/e5658a66-f818-46a3-a6fb-af63a4c7968c
+
+    # Pattern to match acts in the format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
+    pattern = (
+        r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+    )
+
+    match = re.search(pattern, page3_text, re.IGNORECASE)
+
+    if match:
+        whom = match.group(1).strip()
+        year = int(match.group(2))
+        number = int(match.group(3))
+
+        return Act(
+            whom=whom,
+            year=year,
+            number=number,
+        )
+    else:
+        assert 0
+
+        return {"whom": None, "year": None, "number": None}
 
 
 @typechecked
@@ -281,6 +320,8 @@ def get_notice_for_gg(p: Path) -> Notice:
         pdf_type_major = MajorType.GENERAL_NOTICE
     elif "government notice" in page3_text_lower:
         pdf_type_major = MajorType.GOVERNMENT_NOTICE
+    elif "magistrates' courts act" in page3_text_lower:
+        pdf_type_major = MajorType.GOVERNMENT_NOTICE
     else:
         ic(page3_text_lower)
         raise ValueError(
@@ -294,9 +335,15 @@ def get_notice_for_gg(p: Path) -> Notice:
         pdf_type_minor = "Department of Tourism"
     elif "department of transport" in page3_text_lower:
         pdf_type_minor = "Department of Transport"
+    elif "authority for the purpose of exchange control" in page3_text_lower:
+        pdf_type_minor = "CURRENCY AND EXCHANGES ACT 9 OF 1933"
     else:
-        ic(page3_text_lower)
-        assert 0
+        # Over here, we work with types of eg:
+        # - ROAD ACCIDENT FUND ACT 56 OF 1996
+        # - SKILLS DEVELOPMENT ACT 97 OF 1998
+        # - COMPETITION ACT 89 OF 1998
+        act = decode_complex_pdf_type_minor(pdf_text[3])
+        pdf_type_minor = f"{act.whom} ACT {act.number} of {act.year}"
 
     # Now we want something that looks like this:
 
