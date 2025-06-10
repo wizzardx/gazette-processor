@@ -15,8 +15,8 @@ from pydantic import ValidationError
 
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     MajorType,
-    Record,
-    get_record_for_gg,
+    Notice,
+    get_notice_for_gg,
     load_or_scan_pdf_text,
 )
 
@@ -26,7 +26,7 @@ class TestRecord:
 
     def test_valid_record_creation(self):
         """Test creating a valid Record instance"""
-        record = Record(
+        record = Notice(
             gen_n_num=3228,
             gg_num=52724,
             monthday_num=23,
@@ -52,7 +52,7 @@ class TestRecord:
     def test_invalid_record_missing_field(self):
         """Test that Record creation fails when required field is missing"""
         with pytest.raises(ValidationError):
-            Record(
+            Notice(
                 gen_n_num=3228,
                 gg_num=52724,
                 monthday_num=23,
@@ -68,7 +68,7 @@ class TestRecord:
     def test_invalid_record_wrong_type(self):
         """Test that Record creation fails with wrong field types"""
         with pytest.raises(ValidationError):
-            Record(
+            Notice(
                 gen_n_num="3228",  # Should be int
                 gg_num=52724,
                 monthday_num=23,
@@ -83,7 +83,7 @@ class TestRecord:
 
     def test_record_immutability(self):
         """Test that Record fields cannot be modified after creation"""
-        record = Record(
+        record = Notice(
             gen_n_num=3228,
             gg_num=52724,
             monthday_num=23,
@@ -218,19 +218,19 @@ class TestGetRecordForGG:
 
         # Mock file existence
         with patch("os.path.join", return_value="inputs/test.pdf"):
-            record = get_record_for_gg(Path("test.pdf"))
+            notice = get_notice_for_gg(Path("test.pdf"))
 
         # Verify record fields
-        assert record.gen_n_num == 3228
-        assert record.gg_num == 52724
-        assert record.monthday_num == 23
-        assert record.month_name == "May"
-        assert record.year == 2025
-        assert record.page == 3
-        assert record.issn_num == "1682-5845"
-        assert record.type_major == MajorType.GENERAL_NOTICE
-        assert record.type_minor == "Department of Sports, Arts and Culture"
-        assert "Draft National Policy on Heritage Memorialisation" in record.text
+        assert notice.gen_n_num == 3228
+        assert notice.gg_num == 52724
+        assert notice.monthday_num == 23
+        assert notice.month_name == "May"
+        assert notice.year == 2025
+        assert notice.page == 3
+        assert notice.issn_num == "1682-5845"
+        assert notice.type_major == MajorType.GENERAL_NOTICE
+        assert notice.type_minor == "Department of Sports, Arts and Culture"
+        assert "Draft National Policy on Heritage Memorialisation" in notice.text
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_invalid_pdf_format_page1(self, mock_load_pdf):
@@ -243,7 +243,7 @@ class TestGetRecordForGG:
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(AssertionError):
-                get_record_for_gg(Path("test.pdf"))
+                get_notice_for_gg(Path("test.pdf"))
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_major_type(self, mock_load_pdf):
@@ -259,7 +259,7 @@ class TestGetRecordForGG:
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(ValueError, match="Unknown major type"):
-                get_record_for_gg(Path("test.pdf"))
+                get_notice_for_gg(Path("test.pdf"))
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_minor_type(self, mock_load_pdf):
@@ -275,7 +275,7 @@ class TestGetRecordForGG:
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(AssertionError):
-                get_record_for_gg(Path("test.pdf"))
+                get_notice_for_gg(Path("test.pdf"))
 
 
 class TestIntegration:
@@ -310,7 +310,7 @@ class TestIntegration:
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with patch("builtins.open", mock_open()) as mock_file:
-                record = get_record_for_gg(Path("test.pdf"))
+                record = get_notice_for_gg(Path("test.pdf"))
 
                 # Verify the record is correct
                 assert record.gen_n_num == 3228

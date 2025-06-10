@@ -17,8 +17,7 @@ from enhanced_ocr import extract_pdf_text
 from validation_helpers import StrictBaseModel
 
 
-# TODO: Rename Record to Notice
-class Record(StrictBaseModel):
+class Notice(StrictBaseModel):
     gen_n_num: int
     gg_num: int
     monthday_num: int
@@ -84,9 +83,9 @@ def locate_gg_pdf_by_number(gg_number: int) -> Path:
 
 
 @typechecked
-def get_record_for_gg_num(gg_number: int) -> Record:
+def get_record_for_gg_num(gg_number: int) -> Notice:
     p = locate_gg_pdf_by_number(gg_number)
-    return get_record_for_gg(p)
+    return get_notice_for_gg(p)
 
 
 @typechecked
@@ -133,7 +132,7 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
 
 
 @typechecked
-def get_record_for_gg(p: Path) -> Record:
+def get_notice_for_gg(p: Path) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
     pdf_text_list = load_or_scan_pdf_text(p)
@@ -357,7 +356,7 @@ def get_record_for_gg(p: Path) -> Record:
         ic(pdf_text)
         raise ValueError("Could not find page number in PDF")
 
-    return Record(
+    return Notice(
         gen_n_num=pdf_gen_n_num,
         gg_num=pdf_gg_num,
         monthday_num=pdf_monthday_num,
