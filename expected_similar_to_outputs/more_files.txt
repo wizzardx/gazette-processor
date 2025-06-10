@@ -1,0 +1,1 @@
+sftp://desktop.local/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/
