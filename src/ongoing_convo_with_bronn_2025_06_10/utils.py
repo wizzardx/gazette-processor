@@ -139,7 +139,7 @@ class Act(StrictBaseModel):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(page3_text: str) -> Act:
+def decode_complex_pdf_type_minor(full_text: str) -> Act:
     # Over here, we work with types of eg:
     # - ROAD ACCIDENT FUND ACT 56 OF 1996
     # - SKILLS DEVELOPMENT ACT 97 OF 1998
@@ -152,7 +152,7 @@ def decode_complex_pdf_type_minor(page3_text: str) -> Act:
         r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
     )
 
-    match = re.search(pattern, page3_text, re.IGNORECASE)
+    match = re.search(pattern, full_text, re.IGNORECASE)
 
     if match:
         whom = match.group(1).strip()
@@ -191,7 +191,10 @@ def get_notice_for_gg(p: Path) -> Notice:
     ic(p)
     pdf_text_list = load_or_scan_pdf_text(p)
 
-    # Convert list to dictionary for easier access by page number
+    # Combine all pages into a single text string
+    full_text = "\n".join([text for page_num, text in pdf_text_list])
+
+    # Convert list to dictionary for easier access by page number (still needed for some operations)
     pdf_text = {}
     for page_num, text in pdf_text_list:
         pdf_text[page_num] = text
@@ -345,40 +348,33 @@ def get_notice_for_gg(p: Path) -> Notice:
         else:
             continue
 
-    # In page 3 we can determine a few useful things, starting with what I call the "major type", eg "PROCLAMATIONS" or "NOTICES"
-    page3_text_lower = pdf_text[3].lower()
-    if "general notice" in page3_text_lower:
+    # Determine the major type by searching the full text
+    full_text_lower = full_text.lower()
+    if "general notice" in full_text_lower:
         pdf_type_major = MajorType.GENERAL_NOTICE
-    elif "government notice" in page3_text_lower:
+    elif "government notice" in full_text_lower:
         pdf_type_major = MajorType.GOVERNMENT_NOTICE
-    elif "magistrates' courts act" in page3_text_lower:
+    elif "magistrates' courts act" in full_text_lower:
         pdf_type_major = MajorType.GOVERNMENT_NOTICE
     else:
-        # Sometimes we can't find the info we need on page 3, so we need to look
-        # on page 2 instead
-        page2_lower = pdf_text[2].lower()
-        if "government notice" in page2_lower:
-            assert 0
-        else:
-            ic(page2_lower)
-            raise ValueError(
-                f"Unknown major type in page 2 text: {page3_text_lower[:100]}..."
-            )
-    # Also something similar to "Department of Sports, Arts and Culture"
-    if "department of sports, arts and culture" in page3_text_lower:
+        ic(full_text_lower[:500])
+        raise ValueError(f"Unknown major type in full text: {full_text_lower[:100]}...")
+
+    # Determine the minor type by searching the full text
+    if "department of sports, arts and culture" in full_text_lower:
         pdf_type_minor = "Department of Sports, Arts and Culture"
-    elif "national astro-tourism" in page3_text_lower:
+    elif "national astro-tourism" in full_text_lower:
         pdf_type_minor = "Department of Tourism"
-    elif "department of transport" in page3_text_lower:
+    elif "department of transport" in full_text_lower:
         pdf_type_minor = "Department of Transport"
-    elif "authority for the purpose of exchange control" in page3_text_lower:
+    elif "authority for the purpose of exchange control" in full_text_lower:
         pdf_type_minor = "CURRENCY AND EXCHANGES ACT 9 OF 1933"
     else:
         # Over here, we work with types of eg:
         # - ROAD ACCIDENT FUND ACT 56 OF 1996
         # - SKILLS DEVELOPMENT ACT 97 OF 1998
         # - COMPETITION ACT 89 OF 1998
-        act = decode_complex_pdf_type_minor(pdf_text[3])
+        act = decode_complex_pdf_type_minor(full_text)
         pdf_type_minor = f"{act.whom} ACT {act.number} of {act.year}"
 
     # Now we want something that looks like this:
@@ -427,6 +423,8 @@ def get_notice_for_gg(p: Path) -> Notice:
     #    'TholoT@dotgovza Tel: 012 309 3760 May',
 
     if pdf_page_num is None:
+        # Try to find page number from page 3 text specifically
+        page3_text_lower = pdf_text[3].lower() if 3 in pdf_text else ""
         pdf_page_num = attempt_to_get_pdf_page_num(
             pdf_gg_num=pdf_gg_num, page_text_lower=page3_text_lower
         )
