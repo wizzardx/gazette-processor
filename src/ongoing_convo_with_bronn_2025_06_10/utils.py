@@ -140,35 +140,50 @@ class Act(StrictBaseModel):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(full_text: str) -> Act:
+def decode_complex_pdf_type_minor(text: str) -> Act:
     # Over here, we work with types of eg:
     # - ROAD ACCIDENT FUND ACT 56 OF 1996
     # - SKILLS DEVELOPMENT ACT 97 OF 1998
     # - COMPETITION ACT 89 OF 1998
-
     # https://claude.ai/chat/e5658a66-f818-46a3-a6fb-af63a4c7968c
 
-    # Pattern to match acts in the format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
-    pattern = (
-        r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
-    )
+    """
+    Extract act information from legal text.
 
-    match = re.search(pattern, full_text, re.IGNORECASE)
+    Args:
+        text (str): The legal text to parse
+
+    Returns:
+        Act: Act object containing 'whom', 'year', and 'number'
+
+    Raises:
+        ValueError: If no act information is found in the text
+    """
+
+    # Pattern to match acts in the format: "NAME Act (NUMBER/YEAR)"
+    pattern = r"([A-Za-z\s\-']+?)\s+Act\s+\((\d+)/(\d{4})\)"
+
+    match = re.search(pattern, text, re.IGNORECASE)
 
     if match:
         whom = match.group(1).strip()
-        year = int(match.group(2))
-        number = int(match.group(3))
+        number = int(match.group(2))
+        year = int(match.group(3))
 
-        return Act(
-            whom=whom,
-            year=year,
-            number=number,
-        )
+        return Act(whom=whom, year=year, number=number)
     else:
-        assert 0
+        # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
+        pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+        match_old = re.search(pattern_old, text, re.IGNORECASE)
 
-        return {"whom": None, "year": None, "number": None}
+        if match_old:
+            whom = match_old.group(1).strip()
+            year = int(match_old.group(2))
+            number = int(match_old.group(3))
+
+            return Act(whom=whom, year=year, number=number)
+        else:
+            raise ValueError("No act information found in the provided text")
 
 
 @typechecked
@@ -184,6 +199,15 @@ def looks_like_gg_num(n: int) -> bool:
 @typechecked
 def looks_like_pdf_page_num(n: int) -> bool:
     return 1 <= n <= 100
+
+
+def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
+    if 3000 < pdf_gen_n_num < 4000:
+        return MajorType.GENERAL_NOTICE
+    elif 6000 < pdf_gen_n_num < 7000:
+        return MajorType.GOVERNMENT_NOTICE
+    else:
+        raise ValueError(f"Unknown major type for notice number: {pdf_gen_n_num}")
 
 
 @typechecked
@@ -268,19 +292,13 @@ def get_notice_for_gg(p: Path) -> Notice:
             if pdf_page_num is None and looks_like_pdf_page_num(int_word):
                 pdf_page_num = int_word
 
-    # Determine the major type by searching the full text
-    full_text_lower = full_text.lower()
-    if "general notice" in full_text_lower:
-        pdf_type_major = MajorType.GENERAL_NOTICE
-    elif "government notice" in full_text_lower:
-        pdf_type_major = MajorType.GOVERNMENT_NOTICE
-    elif "magistrates' courts act" in full_text_lower:
-        pdf_type_major = MajorType.GOVERNMENT_NOTICE
-    else:
-        ic(full_text_lower[:500])
-        raise ValueError(f"Unknown major type in full text: {full_text_lower[:100]}...")
+    # Determine the major type by checking the Notice Number
+    if pdf_gen_n_num is None:
+        raise ValueError("Unable to determine a Notice Number")
+    pdf_type_major = detect_major_type_from_notice_number(pdf_gen_n_num)
 
     # Determine the minor type by searching the full text
+    full_text_lower = full_text.lower()
     if "department of sports, arts and culture" in full_text_lower:
         pdf_type_minor = "Department of Sports, Arts and Culture"
     elif "national astro-tourism" in full_text_lower:

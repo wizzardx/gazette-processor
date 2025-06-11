@@ -258,7 +258,9 @@ class TestGetRecordForGG:
         ]
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
-            with pytest.raises(ValueError, match="Unknown major type"):
+            with pytest.raises(
+                ValueError, match="No act information found in the provided text"
+            ):
                 get_notice_for_gg(Path("test.pdf"))
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
@@ -274,7 +276,7 @@ class TestGetRecordForGG:
         ]
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
-            with pytest.raises(AssertionError):
+            with pytest.raises(ValueError, match="No act information found"):
                 get_notice_for_gg(Path("test.pdf"))
 
 
