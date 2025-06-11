@@ -4,6 +4,7 @@ import re
 import sys
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 from typeguard import typechecked
 
@@ -25,7 +26,7 @@ class Notice(StrictBaseModel):
     month_name: str
     year: int
     page: int
-    issn_num: str
+    issn_num: Optional[str]
     type_major: "MajorType"
     type_minor: str
     text: str
@@ -193,6 +194,7 @@ def get_notice_for_gg(p: Path) -> Notice:
 
     # Combine all text into a single string
     full_text = "\n".join([text for page_num, text in pdf_text_list])
+    ic(full_text)
 
     # Find the header text that contains volume and date information
     header_marker = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol:"
@@ -224,7 +226,14 @@ def get_notice_for_gg(p: Path) -> Notice:
     pdf_year_num = i(7)
     pdf_gg_num = i(9)
     pdf_monthname_afr_str = s(10)
-    pdf_issn_num = s(12)
+    pdf_issn_num: Optional[str] = s(12)
+
+    # Sometimes the word "Government" appears instead of the ISSN number in the
+    # scanned text. What this means is that the OCR'd text did not include the
+    # ISSN.
+    if pdf_issn_num == "Government":
+        pdf_issn_num = None
+
     pdf_monthname_en_str = s(-1)
 
     # Find the "Contents" section in the full text
