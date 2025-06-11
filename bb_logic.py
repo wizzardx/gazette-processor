@@ -86,3 +86,6 @@ print_record_info(52695)
 
 # MAGISTRATES' COURTS ACT 32 OF 1944
 print_record_info(52723)
+
+# # SUBDIVISION OF AGRICULTURAL LAND ACT 70 OF 1970
+# print_record_info(52712)

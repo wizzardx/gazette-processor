@@ -171,6 +171,21 @@ def decode_complex_pdf_type_minor(page3_text: str) -> Act:
 
 
 @typechecked
+def looks_like_pdf_gen_n_num(n: int) -> bool:
+    return 2000 <= n <= 9000
+
+
+@typechecked
+def looks_like_gg_num(n: int) -> bool:
+    return 30000 <= n <= 90000
+
+
+@typechecked
+def looks_like_pdf_page_num(n: int) -> bool:
+    return 1 <= n <= 100
+
+
+@typechecked
 def get_notice_for_gg(p: Path) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
@@ -193,9 +208,11 @@ def get_notice_for_gg(p: Path) -> Notice:
 
     # ic(pdf_text)
 
+    @typechecked
     def s(i: int) -> str:
         return page1_split[i]
 
+    @typechecked
     def i(i: int) -> int:
         return int(s(i))
 
@@ -290,25 +307,39 @@ def get_notice_for_gg(p: Path) -> Notice:
     pdf_page_num = None
 
     for word in page2_split:
-        # print(word)
+        # ic(word)
         if word.isdigit():
+            int_word = int(word)
             if contents_seen:
-                # The next number is the "Gen N" number, eg 3228
-                if pdf_gen_n_num is None:
-                    pdf_gen_n_num = int(word)
-                elif not gg_num_seen:
-                    # The next number after that is the gg number, eg 52724, or it
-                    # might be a year number
-                    if looks_like_a_year_string(word):
-                        continue
-                    assert int(word) == int(pdf_gg_num)
+                if pdf_gen_n_num is None and looks_like_pdf_gen_n_num(int_word):
+                    pdf_gen_n_num = int_word
+
+                if gg_num_seen is False and looks_like_gg_num(int_word):
                     gg_num_seen = True
-                elif pdf_page_num is None:
-                    # This is the page number where the law info can be found eg 3
-                    pdf_page_num = int(word)
-                else:
-                    # Skip any additional numbers after we have what we need
-                    pass
+
+                if pdf_page_num is None and looks_like_pdf_page_num(int_word):
+                    pdf_page_num = int_word
+
+                # # The next number is the "Gen N" number, eg 3228
+                # if pdf_gen_n_num is None:
+                #     # Ignore values of 0 here, rather than populating pdf_gen_n_num
+                #     if int_word == 0:
+                #         continue
+                #     else:
+                #         pdf_gen_n_num = int(word)
+                # elif not gg_num_seen:
+                #     # The next number after that is the gg number, eg 52724, or it
+                #     # might be a year number
+                #     if looks_like_a_year_string(word):
+                #         continue
+                #     assert int(word) == int(pdf_gg_num)
+                #     gg_num_seen = True
+                # elif pdf_page_num is None:
+                #     # This is the page number where the law info can be found eg 3
+                #     pdf_page_num = int(word)
+                # else:
+                #     # Skip any additional numbers after we have what we need
+                #     pass
         elif word == "Contents":
             contents_seen = True
         else:
@@ -323,11 +354,16 @@ def get_notice_for_gg(p: Path) -> Notice:
     elif "magistrates' courts act" in page3_text_lower:
         pdf_type_major = MajorType.GOVERNMENT_NOTICE
     else:
-        ic(page3_text_lower)
-        raise ValueError(
-            f"Unknown major type in page 3 text: {page3_text_lower[:100]}..."
-        )
-
+        # Sometimes we can't find the info we need on page 3, so we need to look
+        # on page 2 instead
+        page2_lower = pdf_text[2].lower()
+        if "government notice" in page2_lower:
+            assert 0
+        else:
+            ic(page2_lower)
+            raise ValueError(
+                f"Unknown major type in page 2 text: {page3_text_lower[:100]}..."
+            )
     # Also something similar to "Department of Sports, Arts and Culture"
     if "department of sports, arts and culture" in page3_text_lower:
         pdf_type_minor = "Department of Sports, Arts and Culture"
@@ -397,10 +433,10 @@ def get_notice_for_gg(p: Path) -> Notice:
 
     # Ensure all required fields are not None
     if pdf_gen_n_num is None:
-        ic(pdf_text)
+        # ic(pdf_text)
         raise ValueError("Could not find gen_n_num in PDF")
     if pdf_page_num is None:
-        ic(pdf_text)
+        # ic(pdf_text)
         raise ValueError("Could not find page number in PDF")
 
     return Notice(
