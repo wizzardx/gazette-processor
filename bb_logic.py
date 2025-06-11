@@ -12,7 +12,7 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     get_notice_for_gg_num,
 )
 
-notice = get_notice_for_gg_num(52724)
+notice = get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
 print("JUTA'S WEEKLY STATUTES BULLETIN")
 print()
@@ -72,14 +72,14 @@ print()
 
 
 @typechecked
-def _compare_against_json_serialization(gg_num: int, notice: Notice):
+def _compare_against_json_serialization(gg_number: int, notice: Notice):
     j = json.loads(notice.model_dump_json())
 
     # If a cached version of the json (keyed by gg number) exists in our cache
     # directory, then load and compare against that version, otherwise make
     # a new cache file to use next time
     cache_dir = Path("cache")
-    cache_file = cache_dir / f"gg{gg_num}_notice.json"
+    cache_file = cache_dir / f"gg{gg_number}_notice.json"
 
     if cache_file.exists():
         # Load the cached version
@@ -88,22 +88,23 @@ def _compare_against_json_serialization(gg_num: int, notice: Notice):
 
         # Compare the current notice with the cached version
         if j != cached_notice:
-            print(f"WARNING: Notice for GG {gg_num} has changed since last cache!")
+            print(f"WARNING: Notice for GG {gg_number} has changed since last cache!")
             print(f"Cached: {cached_notice}")
             print(f"Current: {j}")
+            assert 0
         else:
-            print(f"Notice for GG {gg_num} matches cached version.")
+            print(f"Notice for GG {gg_number} matches cached version.")
     else:
         # Create the cache file for next time
         cache_dir.mkdir(exist_ok=True)
         with open(cache_file, "w") as f:
             json.dump(j, f, indent=2)
-        print(f"Created cache file for GG {gg_num} at {cache_file}")
+        print(f"Created cache file for GG {gg_number} at {cache_file}")
 
 
 @typechecked
-def print_notice_info(gg_num: int) -> None:
-    notice = get_notice_for_gg_num(gg_num)
+def print_notice_info(gg_number: int, notice_number: int) -> None:
+    notice = get_notice_for_gg_num(gg_number=gg_number, notice_number=notice_number)
     notice_type_major_abbr = get_notice_type_abbr(notice.type_major)
     # print("Department of Tourism:")
 
@@ -121,20 +122,20 @@ def print_notice_info(gg_num: int) -> None:
 
     # Next, compare the notice gainst a previous JSON serialization of the
     # record, if that exists.
-    _compare_against_json_serialization(gg_num, notice)
+    _compare_against_json_serialization(gg_number=gg_number, notice=notice)
 
 
-print_notice_info(52725)  # Department of Tourism
-print_notice_info(52726)  # Department of Transport
+print_notice_info(gg_number=52725, notice_number=3229)  # Department of Tourism
+print_notice_info(gg_number=52726, notice_number=6220)  # Department of Transport
 
 # CURRENCY AND EXCHANGES ACT 9 OF 1933
-print_notice_info(52695)
+print_notice_info(gg_number=52695, notice_number=3197)
 
 # MAGISTRATES' COURTS ACT 32 OF 1944
-print_notice_info(52723)
+print_notice_info(gg_number=52723, notice_number=6219)
 
 # SUBDIVISION OF AGRICULTURAL LAND ACT 70 OF 1970
-print_notice_info(52712)
+print_notice_info(gg_number=52712, notice_number=6214)
 
-# # PHARMACY ACT 53 OF 1974
-# print_notice_info(52709)
+# PHARMACY ACT 53 OF 1974
+print_notice_info(52709, notice_number=787)

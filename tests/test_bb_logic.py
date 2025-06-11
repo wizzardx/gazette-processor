@@ -17,7 +17,7 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     MajorType,
     Notice,
     ScanInfo,
-    get_notice_for_gg,
+    get_notice_for_gg_num,
     load_or_scan_pdf_text,
 )
 
@@ -219,21 +219,22 @@ class TestLoadOrScanPdfText:
         assert os.path.exists("cache")
 
 
-class TestGetRecordForGG:
-    """Tests for the get_record_for_gg function"""
+class TestGetNoticeForGGNum:
+    """Tests for the get_notice_for_gg_num function"""
 
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
-    def test_valid_pdf_parsing(self, mock_load_pdf):
+    def test_valid_pdf_parsing(self, mock_load_pdf, mock_locate):
         """Test parsing a valid PDF with expected format"""
         # Mock PDF text data
         mock_text = 'Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 2 N:B:The Government Printing Works will not:be held responsible for:the quality of "Hard Copies" or "Electronic Files submitted for publication purposes AIDS HELPLINE: 0800-0123-22 Prevention is the cure May\n2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY ERRORS THAT MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; Departement van 3228 Draft National Policy on Heritage Memorialisation: Publication of notice to request public comment on-the draft National Policy Framework for Heritage Memorialisation _ 52724 3\ngovernment gazette staatskoerant general notices algemene kennisgewings department of sports, arts and culture Draft National Policy Framework for Heritage Memorialisation published for comment'
+        mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
             ocr_string=mock_text, plum_string="[No plumber text extracted]"
         )
 
-        # Mock file existence
-        with patch("os.path.join", return_value="inputs/test.pdf"):
-            notice = get_notice_for_gg(Path("test.pdf"))
+        # Test with specific GG and notice numbers
+        notice = get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
         # Verify record fields
         assert notice.gen_n_num == 3228
@@ -247,66 +248,72 @@ class TestGetRecordForGG:
         assert notice.type_minor == "Department of Sports, Arts and Culture"
         assert "Draft National Policy on Heritage Memorialisation" in notice.text
 
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
-    def test_invalid_pdf_format_page1(self, mock_load_pdf):
+    def test_invalid_pdf_format_page1(self, mock_load_pdf, mock_locate):
         """Test handling of PDF with invalid format on page 1"""
+        mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
             ocr_string="Invalid header text without expected format\nPage 2 text\nPage 3 text",
             plum_string="[No plumber text extracted]",
         )
 
-        with patch("os.path.join", return_value="inputs/test.pdf"):
-            with pytest.raises(AssertionError):
-                get_notice_for_gg(Path("test.pdf"))
+        with pytest.raises(
+            AssertionError, match="Could not find header marker in PDF text"
+        ):
+            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
-    def test_unknown_major_type(self, mock_load_pdf):
+    def test_unknown_major_type(self, mock_load_pdf, mock_locate):
         """Test handling of unknown major type"""
+        mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
             ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text",
             plum_string="[No plumber text extracted]",
         )
 
-        with patch("os.path.join", return_value="inputs/test.pdf"):
-            with pytest.raises(
-                ValueError, match="No act information found in the provided text"
-            ):
-                get_notice_for_gg(Path("test.pdf"))
+        with pytest.raises(
+            ValueError, match="No act information found in the provided text"
+        ):
+            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
-    def test_unknown_minor_type(self, mock_load_pdf):
+    def test_unknown_minor_type(self, mock_load_pdf, mock_locate):
         """Test handling of unknown minor type"""
+        mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
             ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department",
             plum_string="[No plumber text extracted]",
         )
 
-        with patch("os.path.join", return_value="inputs/test.pdf"):
-            with pytest.raises(ValueError, match="No act information found"):
-                get_notice_for_gg(Path("test.pdf"))
+        with pytest.raises(ValueError, match="No act information found"):
+            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
 
 class TestIntegration:
     """Integration tests that test the full workflow"""
 
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
-    def test_full_workflow(self, mock_load_pdf):
+    def test_full_workflow(self, mock_load_pdf, mock_locate):
         """Test the complete workflow from PDF to formatted output"""
         # Mock PDF text directly as string
+        mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
             ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture",
             plum_string="[No plumber text extracted]",
         )
 
-        with patch("os.path.join", return_value="inputs/test.pdf"):
-            record = get_notice_for_gg(Path("test.pdf"))
+        record = get_notice_for_gg_num(gg_number=52724, notice_number=3228)
 
-            # Verify the record is correct
-            assert record.gen_n_num == 3228
-            assert record.type_major == MajorType.GENERAL_NOTICE
+        # Verify the record is correct
+        assert record.gen_n_num == 3228
+        assert record.type_major == MajorType.GENERAL_NOTICE
 
-            # Verify the record is correctly parsed
-            assert "Draft National Policy on Heritage Memorialisation" in record.text
+        # Verify the record is correctly parsed
+        assert "Draft National Policy on Heritage Memorialisation" in record.text
 
 
 if __name__ == "__main__":

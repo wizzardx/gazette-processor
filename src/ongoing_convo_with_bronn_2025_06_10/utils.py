@@ -115,9 +115,9 @@ def locate_gg_pdf_by_number(gg_number: int) -> Path:
 
 
 @typechecked
-def get_notice_for_gg_num(gg_number: int) -> Notice:
-    p = locate_gg_pdf_by_number(gg_number)
-    return get_notice_for_gg(p)
+def get_notice_for_gg_num(gg_number: int, notice_number: int) -> Notice:
+    p = locate_gg_pdf_by_number(gg_number=gg_number)
+    return get_notice_for_gg(p=p, gg_number=gg_number, notice_number=notice_number)
 
 
 @typechecked
@@ -247,7 +247,7 @@ def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
 
 
 @typechecked
-def get_notice_for_gg(p: Path) -> Notice:
+def get_notice_for_gg(p: Path, gg_number: int, notice_number: int) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
     scan_info = load_or_scan_pdf_text(p)
