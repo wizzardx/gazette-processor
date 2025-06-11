@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+import pdfplumber
 from typeguard import typechecked
 
 # Add the project root to the path
@@ -25,7 +26,7 @@ class Notice(StrictBaseModel):
     monthday_num: int
     month_name: str
     year: int
-    page: int
+    page: Optional[int]
     issn_num: Optional[str]
     type_major: "MajorType"
     type_minor: str
@@ -33,12 +34,22 @@ class Notice(StrictBaseModel):
 
 
 class MajorType(Enum):
+    BOARD_NOTICE = "BOARD_NOTICE"
     GENERAL_NOTICE = "GENERAL_NOTICE"
     GOVERNMENT_NOTICE = "GOVERNMENT_NOTICE"
 
 
+# Note: List of all of the abbreviations can be found in the footer of the docs
+#       that Bronnwyn gave me
+
+
+class ScanInfo(StrictBaseModel):
+    ocr_string: str
+    plum_string: str
+
+
 @typechecked
-def load_or_scan_pdf_text(p: Path) -> list[tuple[int, str]]:
+def load_or_scan_pdf_text(p: Path) -> ScanInfo:
     # Create cache directory if it doesn't exist
     if not os.path.exists("cache"):
         os.makedirs("cache")
@@ -48,13 +59,13 @@ def load_or_scan_pdf_text(p: Path) -> list[tuple[int, str]]:
     cache_filename = pdf_basename.replace(".pdf", "_ocr_cache.json")
     cache_fname_path = Path("cache") / cache_filename
 
-    # Check if cache file exists
+    # Check if cache file exists for OCR
     if cache_fname_path.exists():
         # Load from cache
         with open(cache_fname_path, "r") as f:
             cached_data = json.load(f)
-        # Convert to expected format: list of (page_num, text) tuples
-        return [(page_num, text) for page_num, text, _ in cached_data]
+        # Concatenate all text from all pages into a single string
+        ocr_string = "\n".join([text for page_num, text, _ in cached_data])
     else:
         # Perform OCR
         ocr_results = extract_pdf_text(p)
@@ -63,8 +74,27 @@ def load_or_scan_pdf_text(p: Path) -> list[tuple[int, str]]:
         with open(cache_fname_path, "w") as f:
             json.dump(ocr_results, f, indent=2)
 
-        # Return in expected format: list of (page_num, text) tuples
-        return [(page_num, text) for page_num, text, _ in ocr_results]
+        # Concatenate all text from all pages into a single string
+        ocr_string = "\n".join([text for page_num, text, _ in ocr_results])
+
+    # Extract text using pdfplumber (first 5 pages by default)
+    plum_text_pages = []
+    with pdfplumber.open(p) as pdf:
+        # Get up to first 5 pages
+        pages_to_read = min(5, len(pdf.pages))
+        for i in range(pages_to_read):
+            page = pdf.pages[i]
+            text = page.extract_text()
+            if text:
+                plum_text_pages.append(text)
+
+    plum_string = "\n".join(plum_text_pages)
+
+    # Ensure plum_string is not empty (StrictBaseModel requires min length 1)
+    if not plum_string:
+        plum_string = "[No plumber text extracted]"  # Placeholder for empty content
+
+    return ScanInfo(ocr_string=ocr_string, plum_string=plum_string)
 
 
 GG_DIR = Path(
@@ -128,6 +158,8 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
 
     # We expect the word at index 4 to match the GG number:
     assert page_split[4] == str(pdf_gg_num)
+
+    ic(int(page_split[5]))
 
     # And assuming it does, then in theory we have our page number next:
     return int(page_split[5])
@@ -202,22 +234,24 @@ def looks_like_pdf_page_num(n: int) -> bool:
 
 
 def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
+    if 2000 < pdf_gen_n_num < 3000:
+        return MajorType.BOARD_NOTICE
     if 3000 < pdf_gen_n_num < 4000:
         return MajorType.GENERAL_NOTICE
     elif 6000 < pdf_gen_n_num < 7000:
         return MajorType.GOVERNMENT_NOTICE
     else:
         raise ValueError(f"Unknown major type for notice number: {pdf_gen_n_num}")
+    # Note: List of all of the abbreviations can be found in the footer of the docs
+    #       that Bronnwyn gave me
 
 
 @typechecked
 def get_notice_for_gg(p: Path) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
-    pdf_text_list = load_or_scan_pdf_text(p)
-
-    # Combine all text into a single string
-    full_text = "\n".join([text for page_num, text in pdf_text_list])
+    scan_info = load_or_scan_pdf_text(p)
+    full_text = scan_info.ocr_string
     ic(full_text)
 
     # Find the header text that contains volume and date information
@@ -346,6 +380,13 @@ def get_notice_for_gg(p: Path) -> Notice:
     if pdf_page_num is None:
         # ic(full_text[:1000])
         raise ValueError("Could not find page number in PDF")
+
+    # If we found the page number, but it was a none-3 value, then for now we
+    # assume that the scan was't reliable enough, and we set the value to None
+    # to indicate a bad scan
+    if pdf_page_num != 3:
+        print(f"Detected page number {pdf_page_num}, assuming it was a bad OCR.")
+        pdf_page_num = None
 
     notice = Notice(
         gen_n_num=pdf_gen_n_num,

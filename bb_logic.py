@@ -34,6 +34,9 @@ print(f"ISSN {notice.issn_num}")
 def to_bb_header_str(t: MajorType) -> str:
     return {MajorType.GENERAL_NOTICE: "PROCLAMATIONS AND NOTICES"}[t]
 
+    # Note: List of all of the abbreviations can be found in the footer of the docs
+    #       that Bronnwyn gave me
+
 
 print()
 # print("PROCLAMATIONS AND NOTICES")
@@ -49,7 +52,14 @@ print()
 @typechecked
 def get_notice_type_abbr(t: MajorType) -> str:
     ic(t)
-    return {MajorType.GENERAL_NOTICE: "GenN", MajorType.GOVERNMENT_NOTICE: "GN"}[t]
+    return {
+        MajorType.GENERAL_NOTICE: "GenN",
+        MajorType.GOVERNMENT_NOTICE: "GN",
+        MajorType.BOARD_NOTICE: "BN",
+    }[t]
+
+    # Note: List of all of the abbreviations can be found in the footer of the docs
+    #       that Bronnwyn gave me
 
 
 notice_type_major_abbr = get_notice_type_abbr(notice.type_major)
@@ -125,3 +135,6 @@ print_notice_info(52723)
 
 # SUBDIVISION OF AGRICULTURAL LAND ACT 70 OF 1970
 print_notice_info(52712)
+
+# # PHARMACY ACT 53 OF 1974
+# print_notice_info(52709)

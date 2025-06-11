@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     MajorType,
     Notice,
+    ScanInfo,
     get_notice_for_gg,
     load_or_scan_pdf_text,
 )
@@ -125,8 +126,9 @@ class TestLoadOrScanPdfText:
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir)
 
+    @patch("pdfplumber.open")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_load_or_scan_first_time(self, mock_extract):
+    def test_load_or_scan_first_time(self, mock_extract, mock_pdfplumber_open):
         """Test loading PDF for the first time (no cache)"""
         # Mock OCR results
         mock_extract.return_value = [
@@ -135,13 +137,24 @@ class TestLoadOrScanPdfText:
             (3, "Page 3 text", 0.99),
         ]
 
+        # Mock pdfplumber
+        mock_pdf = MagicMock()
+        mock_page1 = MagicMock()
+        mock_page1.extract_text.return_value = "Plumber Page 1"
+        mock_page2 = MagicMock()
+        mock_page2.extract_text.return_value = "Plumber Page 2"
+        mock_pdf.pages = [mock_page1, mock_page2]
+        mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
+
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
         # Check that extract_pdf_text was called
         mock_extract.assert_called_once_with(Path("test.pdf"))
 
-        # Check result format
-        assert result == [(1, "Page 1 text"), (2, "Page 2 text"), (3, "Page 3 text")]
+        # Check result is ScanInfo object
+        assert isinstance(result, ScanInfo)
+        assert result.ocr_string == "Page 1 text\nPage 2 text\nPage 3 text"
+        assert result.plum_string == "Plumber Page 1\nPlumber Page 2"
 
         # Check cache was created
         assert os.path.exists("cache/test_ocr_cache.json")
@@ -155,8 +168,9 @@ class TestLoadOrScanPdfText:
         ]
         assert cached_data == expected_data
 
+    @patch("pdfplumber.open")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_load_from_cache(self, mock_extract):
+    def test_load_from_cache(self, mock_extract, mock_pdfplumber_open):
         """Test loading from cache when it exists"""
         # Create cache directory and file
         os.makedirs("cache")
@@ -168,22 +182,33 @@ class TestLoadOrScanPdfText:
         with open("cache/test_ocr_cache.json", "w") as f:
             json.dump(cache_data, f)
 
+        # Mock pdfplumber
+        mock_pdf = MagicMock()
+        mock_page1 = MagicMock()
+        mock_page1.extract_text.return_value = "Plumber Page 1 from cache test"
+        mock_pdf.pages = [mock_page1]
+        mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
+
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
         # Check that extract_pdf_text was NOT called
         mock_extract.assert_not_called()
 
         # Check result format
-        assert result == [
-            (1, "Cached page 1"),
-            (2, "Cached page 2"),
-            (3, "Cached page 3"),
-        ]
+        assert isinstance(result, ScanInfo)
+        assert result.ocr_string == "Cached page 1\nCached page 2\nCached page 3"
+        assert result.plum_string == "Plumber Page 1 from cache test"
 
+    @patch("pdfplumber.open")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_cache_directory_creation(self, mock_extract):
+    def test_cache_directory_creation(self, mock_extract, mock_pdfplumber_open):
         """Test that cache directory is created if it doesn't exist"""
         mock_extract.return_value = [(1, "Text", 0.95)]
+
+        # Mock pdfplumber
+        mock_pdf = MagicMock()
+        mock_pdf.pages = []
+        mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
 
         # Ensure cache directory doesn't exist
         assert not os.path.exists("cache")
@@ -201,20 +226,10 @@ class TestGetRecordForGG:
     def test_valid_pdf_parsing(self, mock_load_pdf):
         """Test parsing a valid PDF with expected format"""
         # Mock PDF text data
-        mock_load_pdf.return_value = [
-            (
-                1,
-                'Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 2 N:B:The Government Printing Works will not:be held responsible for:the quality of "Hard Copies" or "Electronic Files submitted for publication purposes AIDS HELPLINE: 0800-0123-22 Prevention is the cure May',
-            ),
-            (
-                2,
-                "2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY ERRORS THAT MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; Departement van 3228 Draft National Policy on Heritage Memorialisation: Publication of notice to request public comment on-the draft National Policy Framework for Heritage Memorialisation _ 52724 3",
-            ),
-            (
-                3,
-                "government gazette staatskoerant general notices algemene kennisgewings department of sports, arts and culture Draft National Policy Framework for Heritage Memorialisation published for comment",
-            ),
-        ]
+        mock_text = 'Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 2 N:B:The Government Printing Works will not:be held responsible for:the quality of "Hard Copies" or "Electronic Files submitted for publication purposes AIDS HELPLINE: 0800-0123-22 Prevention is the cure May\n2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY ERRORS THAT MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; Departement van 3228 Draft National Policy on Heritage Memorialisation: Publication of notice to request public comment on-the draft National Policy Framework for Heritage Memorialisation _ 52724 3\ngovernment gazette staatskoerant general notices algemene kennisgewings department of sports, arts and culture Draft National Policy Framework for Heritage Memorialisation published for comment'
+        mock_load_pdf.return_value = ScanInfo(
+            ocr_string=mock_text, plum_string="[No plumber text extracted]"
+        )
 
         # Mock file existence
         with patch("os.path.join", return_value="inputs/test.pdf"):
@@ -235,11 +250,10 @@ class TestGetRecordForGG:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_invalid_pdf_format_page1(self, mock_load_pdf):
         """Test handling of PDF with invalid format on page 1"""
-        mock_load_pdf.return_value = [
-            (1, "Invalid header text without expected format"),
-            (2, "Page 2 text"),
-            (3, "Page 3 text"),
-        ]
+        mock_load_pdf.return_value = ScanInfo(
+            ocr_string="Invalid header text without expected format\nPage 2 text\nPage 3 text",
+            plum_string="[No plumber text extracted]",
+        )
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(AssertionError):
@@ -248,14 +262,10 @@ class TestGetRecordForGG:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_major_type(self, mock_load_pdf):
         """Test handling of unknown major type"""
-        mock_load_pdf.return_value = [
-            (
-                1,
-                "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May",
-            ),
-            (2, "2 No, 52724 Contents 3228 Some text _ 52724 3"),
-            (3, "unknown type text"),
-        ]
+        mock_load_pdf.return_value = ScanInfo(
+            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text",
+            plum_string="[No plumber text extracted]",
+        )
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(
@@ -266,14 +276,10 @@ class TestGetRecordForGG:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_minor_type(self, mock_load_pdf):
         """Test handling of unknown minor type"""
-        mock_load_pdf.return_value = [
-            (
-                1,
-                "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May",
-            ),
-            (2, "2 No, 52724 Contents 3228 Some text _ 52724 3"),
-            (3, "general notices algemene kennisgewings unknown department"),
-        ]
+        mock_load_pdf.return_value = ScanInfo(
+            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department",
+            plum_string="[No plumber text extracted]",
+        )
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
             with pytest.raises(ValueError, match="No act information found"):
@@ -283,45 +289,24 @@ class TestGetRecordForGG:
 class TestIntegration:
     """Integration tests that test the full workflow"""
 
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    @patch("os.path.exists")
-    @patch("os.makedirs")
-    def test_full_workflow(self, mock_makedirs, mock_exists, mock_extract):
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
+    def test_full_workflow(self, mock_load_pdf):
         """Test the complete workflow from PDF to formatted output"""
-        # Mock that cache directory doesn't exist
-        mock_exists.return_value = False
-
-        # Mock OCR results
-        mock_extract.return_value = [
-            (
-                1,
-                "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May",
-                0.95,
-            ),
-            (
-                2,
-                "2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3",
-                0.98,
-            ),
-            (
-                3,
-                "general notices algemene kennisgewings department of sports, arts and culture",
-                0.99,
-            ),
-        ]
+        # Mock PDF text directly as string
+        mock_load_pdf.return_value = ScanInfo(
+            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture",
+            plum_string="[No plumber text extracted]",
+        )
 
         with patch("os.path.join", return_value="inputs/test.pdf"):
-            with patch("builtins.open", mock_open()) as mock_file:
-                record = get_notice_for_gg(Path("test.pdf"))
+            record = get_notice_for_gg(Path("test.pdf"))
 
-                # Verify the record is correct
-                assert record.gen_n_num == 3228
-                assert record.type_major == MajorType.GENERAL_NOTICE
+            # Verify the record is correct
+            assert record.gen_n_num == 3228
+            assert record.type_major == MajorType.GENERAL_NOTICE
 
-                # Verify the record is correctly parsed
-                assert (
-                    "Draft National Policy on Heritage Memorialisation" in record.text
-                )
+            # Verify the record is correctly parsed
+            assert "Draft National Policy on Heritage Memorialisation" in record.text
 
 
 if __name__ == "__main__":
