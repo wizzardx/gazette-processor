@@ -85,7 +85,7 @@ def locate_gg_pdf_by_number(gg_number: int) -> Path:
 
 
 @typechecked
-def get_record_for_gg_num(gg_number: int) -> Notice:
+def get_notice_for_gg_num(gg_number: int) -> Notice:
     p = locate_gg_pdf_by_number(gg_number)
     return get_notice_for_gg(p)
 
