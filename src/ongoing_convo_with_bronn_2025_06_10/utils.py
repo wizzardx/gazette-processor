@@ -191,29 +191,29 @@ def get_notice_for_gg(p: Path) -> Notice:
     ic(p)
     pdf_text_list = load_or_scan_pdf_text(p)
 
-    # Combine all pages into a single text string
+    # Combine all text into a single string
     full_text = "\n".join([text for page_num, text in pdf_text_list])
 
-    # Convert list to dictionary for easier access by page number (still needed for some operations)
-    pdf_text = {}
-    for page_num, text in pdf_text_list:
-        pdf_text[page_num] = text
+    # Find the header text that contains volume and date information
+    header_marker = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol:"
+    header_start = full_text.find(header_marker)
+    assert header_start != -1, f"Could not find header marker in PDF text"
 
-    # There is some text that looks like this, which we can use to grab the year (eg 2025) from:
-    # "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025"
-    assert pdf_text[1].startswith(
-        "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol:"
-    )
+    # Extract the header line
+    header_end = full_text.find("\n", header_start)
+    if header_end == -1:
+        header_text = full_text[header_start:]
+    else:
+        header_text = full_text[header_start:header_end]
 
-    # Split the text up for parsing, eg:
-    # ['Government', 'Gazette', 'Staaiskoerant', 'REPUBLIEKVANSUIDAFRIKA', 'Vol:', '719', '23', '2025', 'No:', '52724', 'Mei', 'ISSN', '1682-5845', '2', 'N:B:The', 'Government', 'Printing', 'Works', 'will', 'not:be', 'held', 'responsible', 'for:the', 'quality', 'of', '"Hard', 'Copies"', 'or', '"Electronic', 'Files', 'submitted', 'for', 'publication', 'purposes', 'AIDS', 'HELPLINE:', '0800-0123-22', 'Prevention', 'is', 'the', 'cure', 'May']
-    page1_split = pdf_text[1].split()
+    # Split the header text for parsing
+    header_split = header_text.split()
 
-    # ic(pdf_text)
+    # ic(full_text)
 
     @typechecked
     def s(i: int) -> str:
-        return page1_split[i]
+        return header_split[i]
 
     @typechecked
     def i(i: int) -> int:
@@ -227,126 +227,37 @@ def get_notice_for_gg(p: Path) -> Notice:
     pdf_issn_num = s(12)
     pdf_monthname_en_str = s(-1)
 
-    # "Gen" number (eg 3228) and Page No (eg 3) can often be found on page 2 after the word "Contents"
-    # PS: Gen is used to differentiate proclamations from other types.
-    page2_split = pdf_text[2].split()
-    # ic(page2_split)
+    # Find the "Contents" section in the full text
+    contents_marker = "Contents"
+    contents_start = full_text.find(contents_marker)
+    assert contents_start != -1, "Could not find Contents section"
 
-    # c| page2_split: ['2',
-    #                   'No,',
-    #                   '52724',
-    #                   'IMPORTANT',
-    #                   'NOTICE:',
-    #                   'BE',
-    #                   'HELD',
-    #                   'RESPONSIBLE',
-    #                   'FOR',
-    #                   'ANY',
-    #                   'ERRORS',
-    #                   'THAT',
-    #                   'MIGHT',
-    #                   'OCCUR',
-    #                   'DUE',
-    #                   'To',
-    #                   'THE,',
-    #                   'SUBMISSION',
-    #                   'OF',
-    #                   'INCOMPLETE',
-    #                   'INCORRECT',
-    #                   'ILLEGIBLE',
-    #                   'COPY.',
-    #                   'Contents',
-    #                   'Gazette',
-    #                   'Page',
-    #                   'No.',
-    #                   'No.',
-    #                   'No.',
-    #                   'GENERAL',
-    #                   'NOTICES',
-    #                   'ALGEMENE',
-    #                   'KENNISGEWINGS',
-    #                   'Sports,',
-    #                   'Arts',
-    #                   'and',
-    #                   'Culture,',
-    #                   'Department',
-    #                   'of',
-    #                   '/',
-    #                   'Sport;',
-    #                   'Kuns',
-    #                   'en',
-    #                   'Kultuur;',
-    #                   'Departement',
-    #                   'van',
-    #                   '3228',
-    #                   'Draft',
-    #                   'National',
-    #                   'Policy',
-    #                   'on',
-    #                   'Heritage',
-    #                   'Memorialisation:',
-    #                   'Publication',
-    #                   'of',
-    #                   'notice',
-    #                   'to',
-    #                   'request',
-    #                   'public',
-    #                   'comment',
-    #                   'on-the',
-    #                   'draft',
-    #                   'National',
-    #                   'Policy',
-    #                   'Framework',
-    #                   'for',
-    #                   'Heritage',
-    #                   'Memorialisation',
-    #                   '_',
-    #                   '52724',
-    #                   '3']
+    # Extract text after "Contents" to look for Gen number and page info
+    contents_text = full_text[contents_start:]
+    contents_split = contents_text.split()
+    # ic(contents_split)
 
-    contents_seen = False
+    # Parse the contents section to find Gen number and page info
     pdf_gen_n_num = None
     gg_num_seen = False
     pdf_page_num = None
 
-    for word in page2_split:
+    for idx, word in enumerate(contents_split):
+        # Skip the first occurrence of "Contents" since we already found it
+        if idx == 0 and word == "Contents":
+            continue
+
         # ic(word)
         if word.isdigit():
             int_word = int(word)
-            if contents_seen:
-                if pdf_gen_n_num is None and looks_like_pdf_gen_n_num(int_word):
-                    pdf_gen_n_num = int_word
+            if pdf_gen_n_num is None and looks_like_pdf_gen_n_num(int_word):
+                pdf_gen_n_num = int_word
 
-                if gg_num_seen is False and looks_like_gg_num(int_word):
-                    gg_num_seen = True
+            if gg_num_seen is False and looks_like_gg_num(int_word):
+                gg_num_seen = True
 
-                if pdf_page_num is None and looks_like_pdf_page_num(int_word):
-                    pdf_page_num = int_word
-
-                # # The next number is the "Gen N" number, eg 3228
-                # if pdf_gen_n_num is None:
-                #     # Ignore values of 0 here, rather than populating pdf_gen_n_num
-                #     if int_word == 0:
-                #         continue
-                #     else:
-                #         pdf_gen_n_num = int(word)
-                # elif not gg_num_seen:
-                #     # The next number after that is the gg number, eg 52724, or it
-                #     # might be a year number
-                #     if looks_like_a_year_string(word):
-                #         continue
-                #     assert int(word) == int(pdf_gg_num)
-                #     gg_num_seen = True
-                # elif pdf_page_num is None:
-                #     # This is the page number where the law info can be found eg 3
-                #     pdf_page_num = int(word)
-                # else:
-                #     # Skip any additional numbers after we have what we need
-                #     pass
-        elif word == "Contents":
-            contents_seen = True
-        else:
-            continue
+            if pdf_page_num is None and looks_like_pdf_page_num(int_word):
+                pdf_page_num = int_word
 
     # Determine the major type by searching the full text
     full_text_lower = full_text.lower()
@@ -377,26 +288,13 @@ def get_notice_for_gg(p: Path) -> Notice:
         act = decode_complex_pdf_type_minor(full_text)
         pdf_type_minor = f"{act.whom} ACT {act.number} of {act.year}"
 
-    # Now we want something that looks like this:
-
-    "Draft National Policy Framework for Heritage Memorialisation published for comment"
-
-    # Where what we have in page 2 is this:
-
-    # ic| pdf_text[2]: ('2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY   ERRORS THAT '
-    #                   'MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. '
-    #                   'Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS '
-    #                   'Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; '
-    #                   'Departement van 3228 Draft National Policy on Heritage Memorialisation: '
-    #                   'Publication of notice to request public comment on-the draft National Policy '
-    #                   'Framework for Heritage Memorialisation _ 52724 3')
-    # Traceback (most recent call last):
-
-    # It seems we should be able to get the text between the pdf_issn_num and the underscore
+    # Extract the notice description text
+    # Find the gen_n_num in the contents section and get text after it
     gen_n_num_seen = False
     words_to_use = []
-    for word in pdf_text[2].split():
-        # print(repr(word))
+
+    # Look for the gen number in the contents text and extract description after it
+    for word in contents_split:
         if word == str(pdf_gen_n_num):
             gen_n_num_seen = True
         elif gen_n_num_seen:
@@ -404,40 +302,25 @@ def get_notice_for_gg(p: Path) -> Notice:
                 break
             else:
                 words_to_use.append(word)
-        else:
-            continue
 
     pdf_text_content = " ".join(words_to_use)
-    # Also in PDF Page 3: if we don't have the Notice's Page Number yet, then
-    # then we can sometimes find it there. eg:
-
-    # 3: 'STAATSKOERANT; 23 MEI-2025 No; 52726 3 GovERNMENT NoTICES '
-    #    'GoEWERMENTSKENNISGEWINGS DEPARTMENT OF TRANSPORT NO. 6220 23 2025 DRAFT '
-    #    'COMPREHENSIVE CIVIL AVIATION POLICY The comments: Interested persons '
-    #    'are   requested to   submit written   comments in connection with-the '
-    #    'Draft Comprehensive Civil Aviation Policy within 30.days from the date of '
-    #    'publication of this notice in the Government Gazette. All comments should '
-    #    'be posted or emailed to the Director- General of the Department-of '
-    #    'Transport for the attention-of Ms. Johannah Sekele as follows: Department '
-    #    'of Transport Private Bag X 193 Pretoria 0001 Email: SekeleJ@dot_govza and '
-    #    'TholoT@dotgovza Tel: 012 309 3760 May',
-
+    # If we don't have the page number yet, try to find it in the full text
     if pdf_page_num is None:
-        # Try to find page number from page 3 text specifically
-        page3_text_lower = pdf_text[3].lower() if 3 in pdf_text else ""
+        # Look for pattern like "STAATSKOERANT; 23 MEI-2025 No; 52726 3"
+        full_text_lower = full_text.lower()
         pdf_page_num = attempt_to_get_pdf_page_num(
-            pdf_gg_num=pdf_gg_num, page_text_lower=page3_text_lower
+            pdf_gg_num=pdf_gg_num, page_text_lower=full_text_lower
         )
 
     # Ensure all required fields are not None
     if pdf_gen_n_num is None:
-        # ic(pdf_text)
+        # ic(full_text[:1000])
         raise ValueError("Could not find gen_n_num in PDF")
     if pdf_page_num is None:
-        # ic(pdf_text)
+        # ic(full_text[:1000])
         raise ValueError("Could not find page number in PDF")
 
-    return Notice(
+    notice = Notice(
         gen_n_num=pdf_gen_n_num,
         gg_num=pdf_gg_num,
         monthday_num=pdf_monthday_num,
@@ -449,3 +332,5 @@ def get_notice_for_gg(p: Path) -> Notice:
         type_minor=pdf_type_minor,
         text=pdf_text_content,
     )
+    ic(notice)
+    return notice
