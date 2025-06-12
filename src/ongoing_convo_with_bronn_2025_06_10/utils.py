@@ -275,9 +275,9 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                         year=1933,
                     )
                 else:
-                    print("```")
-                    print(s)
-                    print("```")
+                    # print("```")
+                    # print(s)
+                    # print("```")
                     raise ValueError("No act information found in the provided text")
 
 
@@ -637,8 +637,8 @@ def _extract_logical_lines(text: str) -> list[str]:
     current_logical_line: list[str] = []
     in_logical_line = False
 
-    # Pattern to match the start of a logical line (4-digit code at line start)
-    start_pattern = re.compile(r"^\d{4}\s+")
+    # Pattern to match the start of a logical line (3 of 4-digit code at line start)
+    start_pattern = re.compile(r"^\d{3,4}\s+")
 
     # Pattern to match the end of a logical line (dots followed by numbers)
     end_pattern = re.compile(r"\.{3,}\s+\d+\s+\d+\s*$")
@@ -683,10 +683,13 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     """
     # Pattern to extract all components
     # Groups: (1) notice_number (2) content before dots (3) gazette_number (4) page_number
-    main_pattern = re.compile(r"^(\d{4})\s+(.+?)\.{3,}\s+(\d+)\s+(\d+)\s*$")
+    main_pattern = re.compile(r"^(\d{3,4})\s+(.+?)\.{3,}\s+(\d+)\s+(\d+)\s*$")
 
     match = main_pattern.match(logical_line)
     if not match:
+        print("------------")
+        print(logical_line)
+        print("------------")
         assert 0
         return None
 
@@ -696,31 +699,82 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     page_number = int(match.group(4))
 
     # Extract law information from content
-    # Try two patterns:
-    # 1. English format: "Land Reform (Labour Tenants) Act (3/1996)"
-    # 2. Afrikaans format: "Wet op Belastingadministrasie (28/2011)"
+    # Try multiple patterns:
+    # 1. Standard format: "Something Act (3/1996)"
+    # 2. Alternative format: "Something Act (Act No.36 of 1947)" or "(No.36 of 1947)"
+    # 3. Year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
+    # 4. Afrikaans format: "Wet op Something (28/2011)"
+    # 5. No parentheses format: "Something Act, No. 56 of 1996"
+    # 6. Afrikaans ending in "wet": "Somethingwet, No. 56 van 1996"
 
-    # First try English format
-    act_pattern_english = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
-    act_match = act_pattern_english.search(content)
+    act_match = None
+    law_description = None
+    law_number = None
+    law_year = None
 
-    if not act_match:
-        # Try Afrikaans format - Wet at the beginning
-        act_pattern_afrikaans = re.compile(
-            r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
-        )
-        act_match = act_pattern_afrikaans.search(content)
+    # First try standard English format
+    act_pattern_standard = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
+    act_match = act_pattern_standard.search(content)
 
-        if act_match:
-            # For Afrikaans format, prepend "Wet" to the description
-            law_description = "Wet " + act_match.group(1).strip()
-            law_number = int(act_match.group(2))
-            law_year = int(act_match.group(3))
-    else:
-        # English format matched
+    if act_match:
         law_description = act_match.group(1).strip()
         law_number = int(act_match.group(2))
         law_year = int(act_match.group(3))
+    else:
+        # Try format without parentheses: "Something Act, No. 56 of 1996"
+        act_pattern_no_parens = re.compile(r"^(.+?)\s+Act,\s*No\.?\s*(\d+)\s+of\s+(\d{4})", re.IGNORECASE)
+        act_match = act_pattern_no_parens.search(content)
+
+        if act_match:
+            law_description = act_match.group(1).strip()
+            law_number = int(act_match.group(2))
+            law_year = int(act_match.group(3))
+        else:
+            # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
+            act_pattern_with_year = re.compile(r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)", re.IGNORECASE)
+            act_match = act_pattern_with_year.search(content)
+
+            if act_match:
+                law_description = act_match.group(1).strip()
+                law_year = int(act_match.group(2))
+                law_number = int(act_match.group(3))
+            else:
+                # Try alternative English format with "Act No." or "No."
+                act_pattern_alternative = re.compile(r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)", re.IGNORECASE)
+                act_match = act_pattern_alternative.search(content)
+
+                if act_match:
+                    law_description = act_match.group(1).strip()
+                    law_number = int(act_match.group(2))
+                    law_year = int(act_match.group(3))
+                else:
+                    # Try Afrikaans format - Wet at the beginning
+                    act_pattern_afrikaans = re.compile(r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
+                    act_match = act_pattern_afrikaans.search(content)
+
+                    if act_match:
+                        # For Afrikaans format, prepend "Wet" to the description
+                        law_description = "Wet " + act_match.group(1).strip()
+                        law_number = int(act_match.group(2))
+                        law_year = int(act_match.group(3))
+                    else:
+                        # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
+                        act_pattern_afrikaans_no_parens = re.compile(r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})", re.IGNORECASE)
+                        act_match = act_pattern_afrikaans_no_parens.search(content)
+
+                        if act_match:
+                            law_description = act_match.group(1).strip()
+                            law_number = int(act_match.group(2))
+                            law_year = int(act_match.group(3))
+                        else:
+                            # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
+                            act_pattern_afrikaans_with_parens = re.compile(r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)", re.IGNORECASE)
+                            act_match = act_pattern_afrikaans_with_parens.search(content)
+
+                            if act_match:
+                                law_description = act_match.group(1).strip()
+                                law_number = int(act_match.group(2))
+                                law_year = int(act_match.group(3))
 
     if act_match:
         # Extract the notice description (everything after the Act info)
@@ -766,7 +820,8 @@ def get_notice_for_gg_from_pdf_text_with_long_list_of_notices(
         if row["notice_number"] == notice_number:
             assert match is None
             match = row
-    assert match is not None
+    if match is None:
+        raise ValueError(f"Unable to find details for notice {notice_number}")
 
     # Some sanity checks
     assert match["gazette_number"] == gg_number
@@ -820,7 +875,7 @@ def get_notice_for_gg(
     p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
 ) -> Notice:
     # Grab all text from the PDF file:
-    ic(p)
+    # ic(p)
     text = load_or_scan_pdf_text(p)
 
     # Does this look like a PDF that has a long of notices in it?
@@ -993,9 +1048,9 @@ def get_notice_for_gg(
     pdf_page_num = detect_page_number(text)
     pdf_text = cached_llm.summarize(text)
 
-    print("```")
-    print(text)
-    print("```")
+    # print("```")
+    # print(text)
+    # print("```")
 
     notice = Notice(
         gen_n_num=notice_number,
