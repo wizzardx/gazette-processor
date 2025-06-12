@@ -18,3 +18,8 @@ inputs/
 old/
 repomix-output.xml
 .idea/
+
+.env
+.llm_cache.json
+output/
+*.log

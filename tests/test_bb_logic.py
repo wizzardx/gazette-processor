@@ -127,16 +127,8 @@ class TestLoadOrScanPdfText:
         shutil.rmtree(self.temp_dir)
 
     @patch("pdfplumber.open")
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_load_or_scan_first_time(self, mock_extract, mock_pdfplumber_open):
+    def test_load_or_scan_first_time(self, mock_pdfplumber_open):
         """Test loading PDF for the first time (no cache)"""
-        # Mock OCR results
-        mock_extract.return_value = [
-            (1, "Page 1 text", 0.95),
-            (2, "Page 2 text", 0.98),
-            (3, "Page 3 text", 0.99),
-        ]
-
         # Mock pdfplumber
         mock_pdf = MagicMock()
         mock_page1 = MagicMock()
@@ -148,40 +140,15 @@ class TestLoadOrScanPdfText:
 
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
-        # Check that extract_pdf_text was called
-        mock_extract.assert_called_once_with(Path("test.pdf"))
-
         # Check result is ScanInfo object
         assert isinstance(result, ScanInfo)
-        assert result.ocr_string == "Page 1 text\nPage 2 text\nPage 3 text"
         assert result.plum_string == "Plumber Page 1\nPlumber Page 2"
 
-        # Check cache was created
-        assert os.path.exists("cache/test_ocr_cache.json")
-
-        # Verify cache contents
-        with open("cache/test_ocr_cache.json", "r") as f:
-            cached_data = json.load(f)
-        # JSON serializes tuples as lists, so we need to compare accordingly
-        expected_data = [
-            [page, text, conf] for page, text, conf in mock_extract.return_value
-        ]
-        assert cached_data == expected_data
+        # Note: The current implementation doesn't create cache files anymore
 
     @patch("pdfplumber.open")
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_load_from_cache(self, mock_extract, mock_pdfplumber_open):
+    def test_load_from_cache(self, mock_pdfplumber_open):
         """Test loading from cache when it exists"""
-        # Create cache directory and file
-        os.makedirs("cache")
-        cache_data = [
-            (1, "Cached page 1", 0.95),
-            (2, "Cached page 2", 0.98),
-            (3, "Cached page 3", 0.99),
-        ]
-        with open("cache/test_ocr_cache.json", "w") as f:
-            json.dump(cache_data, f)
-
         # Mock pdfplumber
         mock_pdf = MagicMock()
         mock_page1 = MagicMock()
@@ -191,32 +158,21 @@ class TestLoadOrScanPdfText:
 
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
-        # Check that extract_pdf_text was NOT called
-        mock_extract.assert_not_called()
-
         # Check result format
         assert isinstance(result, ScanInfo)
-        assert result.ocr_string == "Cached page 1\nCached page 2\nCached page 3"
         assert result.plum_string == "Plumber Page 1 from cache test"
 
     @patch("pdfplumber.open")
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.extract_pdf_text")
-    def test_cache_directory_creation(self, mock_extract, mock_pdfplumber_open):
+    def test_cache_directory_creation(self, mock_pdfplumber_open):
         """Test that cache directory is created if it doesn't exist"""
-        mock_extract.return_value = [(1, "Text", 0.95)]
-
         # Mock pdfplumber
         mock_pdf = MagicMock()
         mock_pdf.pages = []
         mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
 
-        # Ensure cache directory doesn't exist
-        assert not os.path.exists("cache")
-
-        load_or_scan_pdf_text(Path("test.pdf"))
-
-        # Check cache directory was created
-        assert os.path.exists("cache")
+        # Note: Current implementation doesn't create cache directory
+        result = load_or_scan_pdf_text(Path("test.pdf"))
+        assert isinstance(result, ScanInfo)
 
 
 class TestGetNoticeForGGNum:
@@ -229,12 +185,17 @@ class TestGetNoticeForGGNum:
         # Mock PDF text data
         mock_text = 'Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 2 N:B:The Government Printing Works will not:be held responsible for:the quality of "Hard Copies" or "Electronic Files submitted for publication purposes AIDS HELPLINE: 0800-0123-22 Prevention is the cure May\n2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY ERRORS THAT MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; Departement van 3228 Draft National Policy on Heritage Memorialisation: Publication of notice to request public comment on-the draft National Policy Framework for Heritage Memorialisation _ 52724 3\ngovernment gazette staatskoerant general notices algemene kennisgewings department of sports, arts and culture Draft National Policy Framework for Heritage Memorialisation published for comment'
         mock_locate.return_value = Path("test.pdf")
-        mock_load_pdf.return_value = ScanInfo(
-            ocr_string=mock_text, plum_string="[No plumber text extracted]"
-        )
+        mock_load_pdf.return_value = ScanInfo(plum_string=mock_text)
 
         # Test with specific GG and notice numbers
-        notice = get_notice_for_gg_num(gg_number=52724, notice_number=3228)
+        # Create a mock cached_llm
+        mock_cached_llm = MagicMock()
+        mock_cached_llm.summarize.return_value = (
+            "Draft National Policy on Heritage Memorialisation"
+        )
+        notice = get_notice_for_gg_num(
+            gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+        )
 
         # Verify record fields
         assert notice.gen_n_num == 3228
@@ -254,14 +215,17 @@ class TestGetNoticeForGGNum:
         """Test handling of PDF with invalid format on page 1"""
         mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
-            ocr_string="Invalid header text without expected format\nPage 2 text\nPage 3 text",
-            plum_string="[No plumber text extracted]",
+            plum_string="Invalid header text without expected format\nPage 2 text\nPage 3 text"
         )
 
         with pytest.raises(
-            AssertionError, match="Could not find header marker in PDF text"
+            ValueError, match="Day number not found in the expected format"
         ):
-            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
+            mock_cached_llm = MagicMock()
+            mock_cached_llm.summarize.return_value = "Invalid text"
+            get_notice_for_gg_num(
+                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+            )
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
@@ -269,14 +233,17 @@ class TestGetNoticeForGGNum:
         """Test handling of unknown major type"""
         mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
-            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text",
-            plum_string="[No plumber text extracted]",
+            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text"
         )
 
         with pytest.raises(
             ValueError, match="No act information found in the provided text"
         ):
-            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
+            mock_cached_llm = MagicMock()
+            mock_cached_llm.summarize.return_value = "Unknown type text"
+            get_notice_for_gg_num(
+                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+            )
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
@@ -284,12 +251,15 @@ class TestGetNoticeForGGNum:
         """Test handling of unknown minor type"""
         mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
-            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department",
-            plum_string="[No plumber text extracted]",
+            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department"
         )
 
         with pytest.raises(ValueError, match="No act information found"):
-            get_notice_for_gg_num(gg_number=52724, notice_number=3228)
+            mock_cached_llm = MagicMock()
+            mock_cached_llm.summarize.return_value = "Unknown department text"
+            get_notice_for_gg_num(
+                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+            )
 
 
 class TestIntegration:
@@ -302,11 +272,16 @@ class TestIntegration:
         # Mock PDF text directly as string
         mock_locate.return_value = Path("test.pdf")
         mock_load_pdf.return_value = ScanInfo(
-            ocr_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture",
-            plum_string="[No plumber text extracted]",
+            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture"
         )
 
-        record = get_notice_for_gg_num(gg_number=52724, notice_number=3228)
+        mock_cached_llm = MagicMock()
+        mock_cached_llm.summarize.return_value = (
+            "Draft National Policy on Heritage Memorialisation: Publication of notice"
+        )
+        record = get_notice_for_gg_num(
+            gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+        )
 
         # Verify the record is correct
         assert record.gen_n_num == 3228

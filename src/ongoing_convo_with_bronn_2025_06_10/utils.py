@@ -16,8 +16,9 @@ sys.path.append(
 
 from icecream import ic
 
-from enhanced_ocr import extract_pdf_text
 from validation_helpers import StrictBaseModel
+
+from .cached_llm import CachedLLM
 
 
 class Notice(StrictBaseModel):
@@ -44,39 +45,11 @@ class MajorType(Enum):
 
 
 class ScanInfo(StrictBaseModel):
-    ocr_string: str
     plum_string: str
 
 
 @typechecked
 def load_or_scan_pdf_text(p: Path) -> ScanInfo:
-    # Create cache directory if it doesn't exist
-    if not os.path.exists("cache"):
-        os.makedirs("cache")
-
-    # Generate cache filename based on PDF filename
-    pdf_basename = p.name
-    cache_filename = pdf_basename.replace(".pdf", "_ocr_cache.json")
-    cache_fname_path = Path("cache") / cache_filename
-
-    # Check if cache file exists for OCR
-    if cache_fname_path.exists():
-        # Load from cache
-        with open(cache_fname_path, "r") as f:
-            cached_data = json.load(f)
-        # Concatenate all text from all pages into a single string
-        ocr_string = "\n".join([text for page_num, text, _ in cached_data])
-    else:
-        # Perform OCR
-        ocr_results = extract_pdf_text(p)
-
-        # Save to cache
-        with open(cache_fname_path, "w") as f:
-            json.dump(ocr_results, f, indent=2)
-
-        # Concatenate all text from all pages into a single string
-        ocr_string = "\n".join([text for page_num, text, _ in ocr_results])
-
     # Extract text using pdfplumber (first 5 pages by default)
     plum_text_pages = []
     with pdfplumber.open(p) as pdf:
@@ -94,7 +67,7 @@ def load_or_scan_pdf_text(p: Path) -> ScanInfo:
     if not plum_string:
         plum_string = "[No plumber text extracted]"  # Placeholder for empty content
 
-    return ScanInfo(ocr_string=ocr_string, plum_string=plum_string)
+    return ScanInfo(plum_string=plum_string)
 
 
 GG_DIR = Path(
@@ -108,16 +81,22 @@ def locate_gg_pdf_by_number(gg_number: int) -> Path:
     result = None
     for p in GG_DIR.iterdir():
         if gg_s in p.name:
-            assert result is None
-            result = p
+            return p
+            # if result is not None:
+            #     raise MultipleMatchesFound(f"Found multiple files containing gg number {gg_number}")
+            # result = p
     assert result is not None
     return result
 
 
 @typechecked
-def get_notice_for_gg_num(gg_number: int, notice_number: int) -> Notice:
-    p = locate_gg_pdf_by_number(gg_number=gg_number)
-    return get_notice_for_gg(p=p, gg_number=gg_number, notice_number=notice_number)
+def get_notice_for_gg_num(
+    gg_number: int, notice_number: int, cached_llm: "CachedLLM"
+) -> Notice:
+    p = locate_gg_pdf_by_number(gg_number)
+    return get_notice_for_gg(
+        p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
+    )
 
 
 @typechecked
@@ -159,8 +138,6 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
     # We expect the word at index 4 to match the GG number:
     assert page_split[4] == str(pdf_gg_num)
 
-    ic(int(page_split[5]))
-
     # And assuming it does, then in theory we have our page number next:
     return int(page_split[5])
 
@@ -172,11 +149,12 @@ class Act(StrictBaseModel):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(text: str) -> Act:
+def decode_complex_pdf_type_minor(scan_info: ScanInfo) -> Act:
     # Over here, we work with types of eg:
     # - ROAD ACCIDENT FUND ACT 56 OF 1996
     # - SKILLS DEVELOPMENT ACT 97 OF 1998
     # - COMPETITION ACT 89 OF 1998
+    # - Currency and Exchanges-Act; 1933 (Act No: 9 of 1933)
     # https://claude.ai/chat/e5658a66-f818-46a3-a6fb-af63a4c7968c
 
     """
@@ -191,6 +169,7 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
     Raises:
         ValueError: If no act information is found in the text
     """
+    text = scan_info.plum_string
 
     # Pattern to match acts in the format: "NAME Act (NUMBER/YEAR)"
     pattern = r"([A-Za-z\s\-']+?)\s+Act\s+\((\d+)/(\d{4})\)"
@@ -204,18 +183,31 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
 
         return Act(whom=whom, year=year, number=number)
     else:
-        # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
-        pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
-        match_old = re.search(pattern_old, text, re.IGNORECASE)
+        # Pattern for format: "NAME-Act; YEAR (Act No: NUMBER of YEAR)"
+        pattern_semicolon = (
+            r"([A-Za-z\s\-']+?)-Act;\s+(\d{4})\s+\(Act\s+No:?\s+(\d+)\s+of\s+\d{4}\)"
+        )
+        match_semicolon = re.search(pattern_semicolon, text, re.IGNORECASE)
 
-        if match_old:
-            whom = match_old.group(1).strip()
-            year = int(match_old.group(2))
-            number = int(match_old.group(3))
+        if match_semicolon:
+            whom = match_semicolon.group(1).strip()
+            year = int(match_semicolon.group(2))
+            number = int(match_semicolon.group(3))
 
             return Act(whom=whom, year=year, number=number)
         else:
-            raise ValueError("No act information found in the provided text")
+            # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
+            pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+            match_old = re.search(pattern_old, text, re.IGNORECASE)
+
+            if match_old:
+                whom = match_old.group(1).strip()
+                year = int(match_old.group(2))
+                number = int(match_old.group(3))
+
+                return Act(whom=whom, year=year, number=number)
+            else:
+                raise ValueError("No act information found in the provided text")
 
 
 @typechecked
@@ -247,92 +239,363 @@ def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
 
 
 @typechecked
-def get_notice_for_gg(p: Path, gg_number: int, notice_number: int) -> Notice:
+def detect_pdf_year_num(scan_info: ScanInfo) -> int:
+    text = scan_info.plum_string
+
+    # Find all 4-digit numbers using word boundaries
+    pattern = r"\b\d{4}\b"
+    matches = re.findall(pattern, text)
+
+    # Check each match to see if it's in the valid year range
+    for match in matches:
+        year = int(match)
+        if 2000 <= year <= 3000:
+            return year
+
+    # Raise exception if no valid year found
+    raise ValueError("No 4-digit year between 2000 and 3000 found in the text")
+
+
+@typechecked
+def detect_gg_num(text: str) -> int:
+    # Find all 5-digit numbers starting with 5 using word boundaries
+    pattern = r"\b5\d{4}\b"
+    matches = re.findall(pattern, text)
+
+    # Return the first match if found
+    if matches:
+        return int(matches[0])
+
+    # Raise exception if no valid GG number found
+    raise ValueError("No 5-digit number starting with 5 found in the text")
+
+
+#
+# @typechecked
+# def detect_vol_num(text: str) -> int:
+#     """
+#     Extracts the volume number from a Government Gazette text.
+#
+#     Args:
+#         text (str): The gazette text to search
+#
+#     Returns:
+#         int: The volume number
+#
+#     Raises:
+#         ValueError: If no volume number is found in the expected format
+#     """
+#     # Pattern to match "Vol." followed by whitespace and capture the digits
+#     pattern = r'Vol\.\s+(\d+)'
+#
+#     match = re.search(pattern, text)
+#
+#     if match:
+#         return int(match.group(1))
+#     else:
+#         raise ValueError("Volume number not found in the expected format 'Vol. XXX'")
+
+
+@typechecked
+def detect_monthday_num(text: str) -> int:
+    """
+    Extracts the day number from a Government Gazette string.
+
+    Args:
+        text (str): The input text containing the gazette information
+
+    Returns:
+        int: The day number
+
+    Raises:
+        ValueError: If no day number is found in the expected format
+    """
+    # Look for pattern "Vol." or "Vol:" followed by volume number, then day number, then year
+    # Pattern: Vol[.:] [volume] [day] [year]
+    pattern = r"Vol[.:]\s*\d+\s+(\d{1,2})\s+\d{4}"
+
+    match = re.search(pattern, text, re.IGNORECASE)
+
+    if match:
+        day = int(match.group(1))
+        # Basic validation that it's a reasonable day number
+        if 1 <= day <= 31:
+            return day
+        else:
+            raise ValueError(f"Invalid day number: {day}. Must be between 1 and 31.")
+    else:
+        raise ValueError(
+            "Day number not found in the expected format 'Vol. [volume] [day] [year]'"
+        )
+
+
+@typechecked
+def detect_year_num(text: str) -> int:
+    """
+    Extracts the year number from a Government Gazette string.
+
+    Args:
+        text (str): The input text containing the gazette information
+
+    Returns:
+        int: The year number
+
+    Raises:
+        ValueError: If no year number is found in the expected format
+    """
+    # Look for pattern "Vol." or "Vol:" followed by volume number, day number, then year
+    # Pattern: Vol[.:] [volume] [day] [year]
+    pattern = r"Vol[.:]\s*\d+\s+\d{1,2}\s+(\d{4})"
+
+    match = re.search(pattern, text, re.IGNORECASE)
+
+    if match:
+        year = int(match.group(1))
+        # Basic validation that it's a reasonable year (assuming modern gazettes)
+        if 1900 <= year <= 2100:
+            return year
+        else:
+            raise ValueError(
+                f"Invalid year number: {year}. Must be between 1900 and 2100."
+            )
+    else:
+        raise ValueError(
+            "Year number not found in the expected format 'Vol. [volume] [day] [year]'"
+        )
+
+
+@typechecked
+def detect_issn_num(text: str) -> str:
+    """
+    Extracts the ISSN from a Government Gazette string.
+
+    Args:
+        text (str): The input text containing the gazette information
+
+    Returns:
+        str: The ISSN in format ####-####
+
+    Raises:
+        ValueError: If no ISSN is found in the expected format
+    """
+    # Look for pattern "ISSN" followed by optional whitespace and the ISSN number
+    # ISSN format is typically ####-#### (4 digits, hyphen, 4 digits)
+    pattern = r"ISSN\s+(\d{4}-\d{4})"
+
+    match = re.search(pattern, text, re.IGNORECASE)
+
+    if match:
+        issn = match.group(1)
+        return issn
+    else:
+        raise ValueError("ISSN not found in the expected format 'ISSN ####-####'")
+
+
+@typechecked
+def detect_monthday_en_str(text: str) -> str:
+    """
+    Extracts the English month name from a Government Gazette string.
+
+    Args:
+        text (str): The input text containing the gazette information
+
+    Returns:
+        str: The month name (e.g., "May", "January", etc.)
+
+    Raises:
+        ValueError: If no valid English month name is found
+    """
+    # List of valid English month names
+    months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
+
+    # Create pattern that matches any of the month names (case-insensitive)
+    # Look for month names that appear as standalone words
+    month_pattern = r"\b(" + "|".join(months) + r")\b"
+
+    match = re.search(month_pattern, text, re.IGNORECASE)
+
+    if match:
+        # Return the month with proper capitalization
+        month = match.group(1)
+        return month.capitalize()
+    else:
+        raise ValueError("No valid English month name found in the text")
+
+
+@typechecked
+def detect_page_number(text: str) -> int:
+    """
+    Extracts the page number from a Government Gazette string.
+    The page number appears immediately after the 5-digit gazette number.
+
+    Args:
+        text (str): The input text containing the gazette information
+
+    Returns:
+        int: The page number
+
+    Raises:
+        ValueError: If no page number is found in the expected format
+    """
+    # Look for pattern "No." or "No:" or "No," followed by 5-digit number, then the page number
+    # Pattern: No[.,:] [5-digit-number] [page-number]
+    pattern1 = r"No[.,:]\s*(\d{5})\s+(\d+)"
+
+    # Alternative pattern: underscore followed by 5-digit number and page number
+    # Pattern: _ [5-digit-number] [page-number]
+    pattern2 = r"_\s*(\d{5})\s+(\d+)"
+
+    # Try first pattern
+    match = re.search(pattern1, text, re.IGNORECASE)
+    if match:
+        page_number = int(match.group(2))  # Second group is the page number
+        # Basic validation that it's a reasonable page number
+        if page_number > 0:
+            return page_number
+        else:
+            raise ValueError(
+                f"Invalid page number: {page_number}. Must be greater than 0."
+            )
+
+    # Try second pattern
+    match = re.search(pattern2, text, re.IGNORECASE)
+    if match:
+        page_number = int(match.group(2))  # Second group is the page number
+        # Basic validation that it's a reasonable page number
+        if page_number > 0:
+            return page_number
+        else:
+            raise ValueError(
+                f"Invalid page number: {page_number}. Must be greater than 0."
+            )
+
+    # If neither pattern matches
+    raise ValueError(
+        "Page number not found in the expected format 'No. [5-digit-number] [page-number]' or '_ [5-digit-number] [page-number]'"
+    )
+
+
+@typechecked
+def get_notice_for_gg(
+    p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
+) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
     scan_info = load_or_scan_pdf_text(p)
-    full_text = scan_info.ocr_string
-    ic(full_text)
+    text = scan_info.plum_string
+    # print("```")
+    # print(text)
+    # print("```")
+    # ic(full_text)
 
-    # Find the header text that contains volume and date information
-    header_marker = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol:"
-    header_start = full_text.find(header_marker)
-    assert header_start != -1, f"Could not find header marker in PDF text"
-
-    # Extract the header line
-    header_end = full_text.find("\n", header_start)
-    if header_end == -1:
-        header_text = full_text[header_start:]
-    else:
-        header_text = full_text[header_start:header_end]
-
-    # Split the header text for parsing
-    header_split = header_text.split()
+    #     # Find the header text that contains volume and date information
+    #     header_marker = "Government Gazette"
+    #     header_start = full_text.find(header_marker)
+    #     if header_start == -1:
+    #         raise AssertionError("Could not find header marker in PDF text")
+    #
+    #     # Extract the header line
+    #     header_end = full_text.find("\n", header_start)
+    #     if header_end == -1:
+    #         header_text = full_text[header_start:]
+    #     else:
+    #         header_text = full_text[header_start:header_end]
+    #
+    #     # Split the header text for parsing
+    #     header_split = header_text.split()
+    #
+    #     ic()
 
     # ic(full_text)
 
-    @typechecked
-    def s(i: int) -> str:
-        return header_split[i]
+    # @typechecked
+    # def s(i: int) -> str:
+    #     return header_split[i]
+    #
+    # @typechecked
+    # def i(i: int) -> int:
+    #     return int(s(i))
 
-    @typechecked
-    def i(i: int) -> int:
-        return int(s(i))
+    # # pdf_vol_num = s(5)
+    # pdf_vol_num = detect_vol_num(text)
 
-    pdf_vol_num = s(5)
-    pdf_monthday_num = i(6)
-    pdf_year_num = i(7)
-    pdf_gg_num = i(9)
-    pdf_monthname_afr_str = s(10)
-    pdf_issn_num: Optional[str] = s(12)
+    # pdf_monthday_num = i(6)
+    pdf_monthday_num = detect_monthday_num(text)
+
+    # pdf_year_num = detect_pdf_year_num(scan_info)  # i(7)
+    pdf_year_num = detect_year_num(text)
+
+    # pdf_gg_num = detect_gg_num(scan_info) # i(9)
+    # pdf_gg_num = detect_gg_num(text)
+
+    # # pdf_monthname_afr_str = s(10)
+    # pdf_monthname_afr_str = detect_monthday_afr_str(text)
+
+    # pdf_issn_num: Optional[str] = s(12)
+    pdf_issn_num = detect_issn_num(text)
 
     # Sometimes the word "Government" appears instead of the ISSN number in the
     # scanned text. What this means is that the OCR'd text did not include the
     # ISSN.
-    if pdf_issn_num == "Government":
-        pdf_issn_num = None
+    # if pdf_issn_num == "Government":
+    #     pdf_issn_num = None
 
-    pdf_monthname_en_str = s(-1)
+    # # pdf_monthname_en_str = s(-1)
+    pdf_monthname_en_str = detect_monthday_en_str(text)
 
-    # Find the "Contents" section in the full text
-    contents_marker = "Contents"
-    contents_start = full_text.find(contents_marker)
-    assert contents_start != -1, "Could not find Contents section"
-
-    # Extract text after "Contents" to look for Gen number and page info
-    contents_text = full_text[contents_start:]
-    contents_split = contents_text.split()
-    # ic(contents_split)
-
-    # Parse the contents section to find Gen number and page info
-    pdf_gen_n_num = None
-    gg_num_seen = False
-    pdf_page_num = None
-
-    for idx, word in enumerate(contents_split):
-        # Skip the first occurrence of "Contents" since we already found it
-        if idx == 0 and word == "Contents":
-            continue
-
-        # ic(word)
-        if word.isdigit():
-            int_word = int(word)
-            if pdf_gen_n_num is None and looks_like_pdf_gen_n_num(int_word):
-                pdf_gen_n_num = int_word
-
-            if gg_num_seen is False and looks_like_gg_num(int_word):
-                gg_num_seen = True
-
-            if pdf_page_num is None and looks_like_pdf_page_num(int_word):
-                pdf_page_num = int_word
-
-    # Determine the major type by checking the Notice Number
-    if pdf_gen_n_num is None:
-        raise ValueError("Unable to determine a Notice Number")
-    pdf_type_major = detect_major_type_from_notice_number(pdf_gen_n_num)
+    #
+    # # Find the "Contents" section in the full text
+    # contents_marker = "Contents"
+    # contents_start = full_text.find(contents_marker)
+    # assert contents_start != -1, "Could not find Contents section"
+    #
+    # # Extract text after "Contents" to look for Gen number and page info
+    # contents_text = full_text[contents_start:]
+    # contents_split = contents_text.split()
+    # # ic(contents_split)
+    #
+    # # Parse the contents section to find Gen number and page info
+    # pdf_gen_n_num = None
+    # gg_num_seen = False
+    # pdf_page_num = None
+    #
+    # for idx, word in enumerate(contents_split):
+    #     # Skip the first occurrence of "Contents" since we already found it
+    #     if idx == 0 and word == "Contents":
+    #         continue
+    #
+    #     # ic(word)
+    #     if word.isdigit():
+    #         int_word = int(word)
+    #         if pdf_gen_n_num is None and looks_like_pdf_gen_n_num(int_word):
+    #             pdf_gen_n_num = int_word
+    #
+    #         if gg_num_seen is False and looks_like_gg_num(int_word):
+    #             gg_num_seen = True
+    #
+    #         if pdf_page_num is None and looks_like_pdf_page_num(int_word):
+    #             pdf_page_num = int_word
+    #
+    # # Determine the major type by checking the Notice Number
+    # if pdf_gen_n_num is None:
+    #     raise ValueError("Unable to determine a Notice Number")
+    pdf_type_major = detect_major_type_from_notice_number(notice_number)
 
     # Determine the minor type by searching the full text
-    full_text_lower = full_text.lower()
+    full_text_lower = text.lower()
     if "department of sports, arts and culture" in full_text_lower:
         pdf_type_minor = "Department of Sports, Arts and Culture"
     elif "national astro-tourism" in full_text_lower:
@@ -346,51 +609,68 @@ def get_notice_for_gg(p: Path, gg_number: int, notice_number: int) -> Notice:
         # - ROAD ACCIDENT FUND ACT 56 OF 1996
         # - SKILLS DEVELOPMENT ACT 97 OF 1998
         # - COMPETITION ACT 89 OF 1998
-        act = decode_complex_pdf_type_minor(full_text)
+        act = decode_complex_pdf_type_minor(scan_info)
         pdf_type_minor = f"{act.whom} ACT {act.number} of {act.year}"
+    #
+    # # Extract the notice description text
+    # # Find the gen_n_num in the contents section and get text after it
+    # gen_n_num_seen = False
+    # words_to_use = []
+    #
+    # # Look for the gen number in the contents text and extract description after it
+    # for word in contents_split:
+    #     if word == str(pdf_gen_n_num):
+    #         gen_n_num_seen = True
+    #     elif gen_n_num_seen:
+    #         if word == "_":
+    #             break
+    #         else:
+    #             words_to_use.append(word)
+    #
+    # pdf_text_content = " ".join(words_to_use)
+    # # If we don't have the page number yet, try to find it in the full text
+    # if pdf_page_num is None:
+    #     # Look for pattern like "STAATSKOERANT; 23 MEI-2025 No; 52726 3"
+    #     full_text_lower = full_text.lower()
+    #     pdf_page_num = attempt_to_get_pdf_page_num(
+    #         pdf_gg_num=pdf_gg_num, page_text_lower=full_text_lower
+    #     )
+    #
+    # # Ensure all required fields are not None
+    # if pdf_gen_n_num is None:
+    #     # ic(full_text[:1000])
+    #     raise ValueError("Could not find gen_n_num in PDF")
+    # if pdf_page_num is None:
+    #     # ic(full_text[:1000])
+    #     raise ValueError("Could not find page number in PDF")
+    #
+    # # If we found the page number, but it was a none-3 value, then for now we
+    # # assume that the scan was't reliable enough, and we set the value to None
+    # # to indicate a bad scan
+    # if pdf_page_num != 3:
+    #     print(f"Detected page number {pdf_page_num}, assuming it was a bad OCR.")
+    #     pdf_page_num = None
+    #
+    # # Check that auto-detectged gg number and notice number match the ones that
+    # # were passed into the function
+    # if pdf_gg_num != gg_number:
+    #     print(
+    #         f"Warning - detected GG number {gg_number}, but expected {pdf_gg_num}"
+    #     )
+    #     pdf_gg_num = gg_number
+    #
+    # if pdf_gen_n_num != notice_number:
+    #     print(
+    #         f"Warning - detected notice number {pdf_gen_n_num}, but expected {notice_number}"
+    #     )
+    #     pdf_gen_n_num = notice_number
 
-    # Extract the notice description text
-    # Find the gen_n_num in the contents section and get text after it
-    gen_n_num_seen = False
-    words_to_use = []
-
-    # Look for the gen number in the contents text and extract description after it
-    for word in contents_split:
-        if word == str(pdf_gen_n_num):
-            gen_n_num_seen = True
-        elif gen_n_num_seen:
-            if word == "_":
-                break
-            else:
-                words_to_use.append(word)
-
-    pdf_text_content = " ".join(words_to_use)
-    # If we don't have the page number yet, try to find it in the full text
-    if pdf_page_num is None:
-        # Look for pattern like "STAATSKOERANT; 23 MEI-2025 No; 52726 3"
-        full_text_lower = full_text.lower()
-        pdf_page_num = attempt_to_get_pdf_page_num(
-            pdf_gg_num=pdf_gg_num, page_text_lower=full_text_lower
-        )
-
-    # Ensure all required fields are not None
-    if pdf_gen_n_num is None:
-        # ic(full_text[:1000])
-        raise ValueError("Could not find gen_n_num in PDF")
-    if pdf_page_num is None:
-        # ic(full_text[:1000])
-        raise ValueError("Could not find page number in PDF")
-
-    # If we found the page number, but it was a none-3 value, then for now we
-    # assume that the scan was't reliable enough, and we set the value to None
-    # to indicate a bad scan
-    if pdf_page_num != 3:
-        print(f"Detected page number {pdf_page_num}, assuming it was a bad OCR.")
-        pdf_page_num = None
+    pdf_page_num = detect_page_number(text)
+    pdf_text = cached_llm.summarize(text)
 
     notice = Notice(
-        gen_n_num=pdf_gen_n_num,
-        gg_num=pdf_gg_num,
+        gen_n_num=notice_number,
+        gg_num=gg_number,
         monthday_num=pdf_monthday_num,
         month_name=pdf_monthname_en_str,
         year=pdf_year_num,
@@ -398,7 +678,7 @@ def get_notice_for_gg(p: Path, gg_number: int, notice_number: int) -> Notice:
         issn_num=pdf_issn_num,
         type_major=pdf_type_major,
         type_minor=pdf_type_minor,
-        text=pdf_text_content,
+        text=pdf_text,
     )
-    ic(notice)
+    # ic(notice)
     return notice

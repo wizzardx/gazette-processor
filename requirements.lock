@@ -14,10 +14,13 @@ annotated-types==0.7.0
     # via pydantic
 asttokens==3.0.0
     # via icecream
+certifi==2025.4.26
+    # via requests
 cffi==1.17.1
     # via cryptography
 charset-normalizer==3.4.2
     # via pdfminer-six
+    # via requests
 click==8.2.1
     # via ongoing-convo-with-bronn-2025-06-10
 colorama==0.4.6
@@ -28,6 +31,8 @@ cryptography==45.0.4
     # via pdfminer-six
 easyocr==1.7.2
     # via ongoing-convo-with-bronn-2025-06-10
+environs==14.2.0
+    # via ongoing-convo-with-bronn-2025-06-10
 executing==2.2.0
     # via icecream
 filelock==3.18.0
@@ -36,6 +41,8 @@ fsspec==2025.5.1
     # via torch
 icecream==2.1.4
     # via ongoing-convo-with-bronn-2025-06-10
+idna==3.10
+    # via requests
 imageio==2.37.0
     # via scikit-image
 iniconfig==2.1.0
@@ -46,6 +53,8 @@ lazy-loader==0.4
     # via scikit-image
 markupsafe==3.0.2
     # via jinja2
+marshmallow==4.0.0
+    # via environs
 mpmath==1.3.0
     # via sympy
 mypy==1.16.0
@@ -154,8 +163,12 @@ pytest-cov==6.1.1
     # via ongoing-convo-with-bronn-2025-06-10
 python-bidi==0.6.6
     # via easyocr
+python-dotenv==1.1.0
+    # via environs
 pyyaml==6.0.2
     # via easyocr
+requests==2.32.4
+    # via ongoing-convo-with-bronn-2025-06-10
 scikit-image==0.25.2
     # via easyocr
 scipy==1.15.3
@@ -192,3 +205,5 @@ typing-extensions==4.14.0
     # via typing-inspection
 typing-inspection==0.4.1
     # via pydantic
+urllib3==2.4.0
+    # via requests
