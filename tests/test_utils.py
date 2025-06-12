@@ -6,13 +6,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.ongoing_convo_with_bronn_2025_06_10.utils import (
-    Act,
-    GgPdfs,
-    MajorType,
-    Notice,
+from src.ongoing_convo_with_bronn_2025_06_10.common_types import Act, MajorType, Notice
+from src.ongoing_convo_with_bronn_2025_06_10.pdf_parser_multi_notice import (
     _extract_logical_lines,
     _parse_single_entry,
+    parse_gazette_document,
+)
+from src.ongoing_convo_with_bronn_2025_06_10.utils import (
+    GgPdfs,
     attempt_to_get_pdf_page_num,
     decode_complex_pdf_type_minor,
     detect_gg_num,
@@ -31,7 +32,6 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     looks_like_pdf_gen_n_num,
     looks_like_pdf_page_num,
     looks_like_pdf_with_long_list_of_notices,
-    parse_gazette_document,
     parse_gg_filename,
 )
 
@@ -531,7 +531,7 @@ No. 52724 3"""
         "src.ongoing_convo_with_bronn_2025_06_10.utils.looks_like_pdf_with_long_list_of_notices"
     )
     @patch(
-        "src.ongoing_convo_with_bronn_2025_06_10.utils.get_notice_for_gg_from_pdf_text_with_long_list_of_notices"
+        "src.ongoing_convo_with_bronn_2025_06_10.utils.get_notice_from_multi_notice_pdf"
     )
     def test_long_pdf_processing(
         self, mock_get_notice_long, mock_looks_like, mock_load_text

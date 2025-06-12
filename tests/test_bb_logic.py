@@ -12,9 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic import ValidationError
 
+from src.ongoing_convo_with_bronn_2025_06_10.common_types import MajorType, Notice
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
-    MajorType,
-    Notice,
     get_notice_for_gg_num,
     load_or_scan_pdf_text,
 )
