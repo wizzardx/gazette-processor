@@ -522,7 +522,7 @@ def detect_page_number(text: str) -> int:
         ValueError: If no page number is found in the expected format
     """
     # Look for pattern "No." or "No:" or "No," followed by 5-digit number, then the page number
-    # Pattern: No[.,:] [5-digit-number] [page-number]
+    # Pattern: NoAa[.,:] [5-digit-number] [page-number]
     pattern1 = r"No[.,:]\s*(\d{5})\s+(\d+)"
 
     # Alternative pattern: underscore followed by 5-digit number and page number
@@ -687,6 +687,7 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
 
     match = main_pattern.match(logical_line)
     if not match:
+        assert 0
         return None
 
     notice_number = int(match.group(1))
@@ -695,17 +696,33 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     page_number = int(match.group(4))
 
     # Extract law information from content
-    # Pattern to find Act name and number/year
-    # Looking for pattern like "Land Reform (Labour Tenants) Act (3/1996)"
-    act_pattern = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)")
+    # Try two patterns:
+    # 1. English format: "Land Reform (Labour Tenants) Act (3/1996)"
+    # 2. Afrikaans format: "Wet op Belastingadministrasie (28/2011)"
 
-    act_match = act_pattern.search(content)
+    # First try English format
+    act_pattern_english = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
+    act_match = act_pattern_english.search(content)
 
-    if act_match:
+    if not act_match:
+        # Try Afrikaans format - Wet at the beginning
+        act_pattern_afrikaans = re.compile(
+            r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
+        )
+        act_match = act_pattern_afrikaans.search(content)
+
+        if act_match:
+            # For Afrikaans format, prepend "Wet" to the description
+            law_description = "Wet " + act_match.group(1).strip()
+            law_number = int(act_match.group(2))
+            law_year = int(act_match.group(3))
+    else:
+        # English format matched
         law_description = act_match.group(1).strip()
         law_number = int(act_match.group(2))
         law_year = int(act_match.group(3))
 
+    if act_match:
         # Extract the notice description (everything after the Act info)
         # Find where the Act match ends
         act_end = act_match.end()
@@ -719,16 +736,10 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         # Remove leading colons and whitespace
         notice_description = remaining_content.lstrip(":").strip()
     else:
-        # Fallback for entries that don't match the expected pattern
-        law_description = content.split(":")[0].strip() if ":" in content else content
-        law_number = None
-        law_year = None
-
-        # For non-standard entries, try to extract description after first colon
-        if ":" in content:
-            notice_description = content.split(":", 1)[1].strip()
-        else:
-            notice_description = content
+        print("-----------")
+        print(logical_line)
+        print("-----------")
+        raise ValueError("Unable to extract Act details from a string")
 
     return {
         "logical_line": logical_line,
