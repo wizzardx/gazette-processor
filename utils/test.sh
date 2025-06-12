@@ -29,3 +29,7 @@ pandoc -o output/output.docx output/output.md \
   --metadata title="JUTA'S WEEKLY STATUTES BULLETIN" \
   --metadata author="[Automatically Generated]" \
   --metadata date="$(date +%Y-%m-%d)"
+
+echo
+echo -e "\e[32mTests completed succesfully.\e[0m"
+echo

@@ -251,34 +251,49 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
 
             return Act(whom=whom, year=year, number=number)
         else:
-            # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
-            pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
-            match_old = re.search(pattern_old, text, re.IGNORECASE)
+            # Pattern for format: "[NUMBER] NAME Act, No. NUMBER of YEAR"
+            pattern_no_format = (
+                r"(?:\d+\s+)?([A-Za-z\s\-']+?)\s+Act,\s+No\.\s+(\d+)\s+of\s+(\d{4})"
+            )
+            match_no_format = re.search(pattern_no_format, text, re.IGNORECASE)
 
-            if match_old:
-                whom = match_old.group(1).strip()
-                year = int(match_old.group(2))
-                number = int(match_old.group(3))
+            if match_no_format:
+                whom = match_no_format.group(1).strip()
+                number = int(match_no_format.group(2))
+                year = int(match_no_format.group(3))
 
                 return Act(whom=whom, year=year, number=number)
             else:
-                # Special cases here. We need the plumbum line to be joined by
-                # spaces for this one, rather than newlines
-                s = text.replace("\n", " ")
-                if (
-                    "with limited authority for the purpose of Exchange Control Regulations"
-                    in s
-                ):
-                    return Act(
-                        whom="Currency and Exchanges",
-                        number=9,
-                        year=1933,
-                    )
+                # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
+                pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+                match_old = re.search(pattern_old, text, re.IGNORECASE)
+
+                if match_old:
+                    whom = match_old.group(1).strip()
+                    year = int(match_old.group(2))
+                    number = int(match_old.group(3))
+
+                    return Act(whom=whom, year=year, number=number)
                 else:
-                    # print("```")
-                    # print(s)
-                    # print("```")
-                    raise ValueError("No act information found in the provided text")
+                    # Special cases here. We need the plumbum line to be joined by
+                    # spaces for this one, rather than newlines
+                    s = text.replace("\n", " ")
+                    if (
+                        "with limited authority for the purpose of Exchange Control Regulations"
+                        in s
+                    ):
+                        return Act(
+                            whom="Currency and Exchanges",
+                            number=9,
+                            year=1933,
+                        )
+                    else:
+                        print("----------------------")
+                        print(s)
+                        print("----------------------")
+                        raise ValueError(
+                            "No act information found in the provided text"
+                        )
 
 
 @typechecked
@@ -713,7 +728,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     law_year = None
 
     # First try standard English format
-    act_pattern_standard = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
+    act_pattern_standard = re.compile(
+        r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)", re.IGNORECASE
+    )
     act_match = act_pattern_standard.search(content)
 
     if act_match:
@@ -722,7 +739,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         law_year = int(act_match.group(3))
     else:
         # Try format without parentheses: "Something Act, No. 56 of 1996"
-        act_pattern_no_parens = re.compile(r"^(.+?)\s+Act,\s*No\.?\s*(\d+)\s+of\s+(\d{4})", re.IGNORECASE)
+        act_pattern_no_parens = re.compile(
+            r"^(.+?)\s+Act,\s*No\.?\s*(\d+)\s+of\s+(\d{4})", re.IGNORECASE
+        )
         act_match = act_pattern_no_parens.search(content)
 
         if act_match:
@@ -731,7 +750,10 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
             law_year = int(act_match.group(3))
         else:
             # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
-            act_pattern_with_year = re.compile(r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)", re.IGNORECASE)
+            act_pattern_with_year = re.compile(
+                r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)",
+                re.IGNORECASE,
+            )
             act_match = act_pattern_with_year.search(content)
 
             if act_match:
@@ -740,7 +762,10 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                 law_number = int(act_match.group(3))
             else:
                 # Try alternative English format with "Act No." or "No."
-                act_pattern_alternative = re.compile(r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)", re.IGNORECASE)
+                act_pattern_alternative = re.compile(
+                    r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)",
+                    re.IGNORECASE,
+                )
                 act_match = act_pattern_alternative.search(content)
 
                 if act_match:
@@ -749,7 +774,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                     law_year = int(act_match.group(3))
                 else:
                     # Try Afrikaans format - Wet at the beginning
-                    act_pattern_afrikaans = re.compile(r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE)
+                    act_pattern_afrikaans = re.compile(
+                        r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
+                    )
                     act_match = act_pattern_afrikaans.search(content)
 
                     if act_match:
@@ -759,7 +786,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                         law_year = int(act_match.group(3))
                     else:
                         # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
-                        act_pattern_afrikaans_no_parens = re.compile(r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})", re.IGNORECASE)
+                        act_pattern_afrikaans_no_parens = re.compile(
+                            r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})", re.IGNORECASE
+                        )
                         act_match = act_pattern_afrikaans_no_parens.search(content)
 
                         if act_match:
@@ -768,8 +797,13 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                             law_year = int(act_match.group(3))
                         else:
                             # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
-                            act_pattern_afrikaans_with_parens = re.compile(r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)", re.IGNORECASE)
-                            act_match = act_pattern_afrikaans_with_parens.search(content)
+                            act_pattern_afrikaans_with_parens = re.compile(
+                                r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)",
+                                re.IGNORECASE,
+                            )
+                            act_match = act_pattern_afrikaans_with_parens.search(
+                                content
+                            )
 
                             if act_match:
                                 law_description = act_match.group(1).strip()
@@ -818,8 +852,11 @@ def get_notice_for_gg_from_pdf_text_with_long_list_of_notices(
     match = None
     for row in rows:
         if row["notice_number"] == notice_number:
-            assert match is None
-            match = row
+            if match is not None:
+                print(f"Notice #{notice_number} was seen multiple times")
+            else:
+                # We work with the first version in our report (often English)
+                match = row
     if match is None:
         raise ValueError(f"Unable to find details for notice {notice_number}")
 
@@ -833,7 +870,7 @@ def get_notice_for_gg_from_pdf_text_with_long_list_of_notices(
     pdf_page_num = match["page_number"]
     pdf_issn_num = detect_issn_num(text)
     pdf_type_major = detect_major_type_from_notice_number(notice_number)
-    pdf_type_minor = detect_minor_pdf_type(text)
+    pdf_type_minor = detect_minor_pdf_type(match["logical_line"])
     pdf_text = cached_llm.summarize(match["notice_description"])
 
     return Notice(
