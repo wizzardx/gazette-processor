@@ -1,10 +1,10 @@
-import json
 import os
 import re
 import sys
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pdfplumber
 from typeguard import typechecked
@@ -74,18 +74,78 @@ GG_DIR = Path(
     "/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/"
 )
 
+#
+# class MultipleMatchesFound(ValueError):
+#     pass
+
 
 @typechecked
-def locate_gg_pdf_by_number(gg_number: int) -> Path:
+def parse_gg_filename(filename: str) -> Optional[dict[str, Any]]:
+    """
+    Parse filename with pattern: gg{number}_{date}.pdf
+
+    Returns:
+        dict with 'gg_number' and 'publish_date' keys if pattern matches
+        None if pattern doesn't match
+    """
+    # Pattern: gg followed by digits, underscore, date, .pdf
+    pattern = r"^gg(\d+)_(\d{1,2}[A-Za-z]{3}\d{4})\.pdf$"
+
+    match = re.match(pattern, filename)
+
+    if match:
+        gg_number = int(match.group(1))
+        date_string = match.group(2)
+
+        try:
+            # Parse the date (e.g., "23May2025")
+            publish_date = datetime.strptime(date_string, "%d%b%Y")
+
+            return {"gg_number": gg_number, "publish_date": publish_date}
+        except ValueError:
+            # Invalid date format
+            return None
+    else:
+        return None
+
+
+@typechecked
+class GgPdfs:
+    def __init__(self) -> None:
+        self._path: Optional[Path] = None
+        self._gg_number: Optional[int] = None
+        self._publish_date: Optional[datetime] = None
+
+    def path(self) -> Path:
+        assert self._path is not None
+        return self._path
+
+    def add_path(self, p: Path) -> None:
+        parsed = parse_gg_filename(p.name)
+        if parsed is not None:
+            assert self._path is None
+            self._path = p
+            self._gg_number = parsed["gg_number"]
+            self._publish_date = parsed["publish_date"]
+        else:
+            assert 0
+
+    # assert 0
+    # if result is not None:
+    #     assert 0
+    #     raise MultipleMatchesFound(f"Found multiple files containing gg number {gg_number}")
+    # result = p
+    # assertj 0
+    #
+
+
+@typechecked
+def locate_gg_pdf_by_number(gg_number: int) -> GgPdfs:
+    result = GgPdfs()
     gg_s = str(gg_number)
-    result = None
     for p in GG_DIR.iterdir():
         if gg_s in p.name:
-            return p
-            # if result is not None:
-            #     raise MultipleMatchesFound(f"Found multiple files containing gg number {gg_number}")
-            # result = p
-    assert result is not None
+            result.add_path(p)
     return result
 
 
@@ -93,7 +153,8 @@ def locate_gg_pdf_by_number(gg_number: int) -> Path:
 def get_notice_for_gg_num(
     gg_number: int, notice_number: int, cached_llm: "CachedLLM"
 ) -> Notice:
-    p = locate_gg_pdf_by_number(gg_number)
+    pdf_info = locate_gg_pdf_by_number(gg_number)
+    p = pdf_info.path()
     return get_notice_for_gg(
         p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
     )
@@ -207,7 +268,23 @@ def decode_complex_pdf_type_minor(scan_info: ScanInfo) -> Act:
 
                 return Act(whom=whom, year=year, number=number)
             else:
-                raise ValueError("No act information found in the provided text")
+                # Special cases here. We need the plumbum line to be joined by
+                # spaces for this one, rather than newlines
+                s = scan_info.plum_string.replace("\n", " ")
+                if (
+                    "with limited authority for the purpose of Exchange Control Regulations"
+                    in s
+                ):
+                    return Act(
+                        whom="Currency and Exchanges",
+                        number=9,
+                        year=1933,
+                    )
+                else:
+                    print("```")
+                    print(s)
+                    print("```")
+                    raise ValueError("No act information found in the provided text")
 
 
 @typechecked
@@ -496,6 +573,9 @@ def get_notice_for_gg(
     ic(p)
     scan_info = load_or_scan_pdf_text(p)
     text = scan_info.plum_string
+
+    # Sometimes this is a type of GG that lists
+
     # print("```")
     # print(text)
     # print("```")
@@ -667,6 +747,10 @@ def get_notice_for_gg(
 
     pdf_page_num = detect_page_number(text)
     pdf_text = cached_llm.summarize(text)
+
+    print("```")
+    print(text)
+    print("```")
 
     notice = Notice(
         gen_n_num=notice_number,

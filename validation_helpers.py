@@ -33,7 +33,7 @@ combining the benefits of Pydantic, typeguard, and custom validation logic.
 
 from abc import ABC, abstractmethod
 from functools import total_ordering
-from typing import Any, Dict, Protocol, Type, TypeVar
+from typing import Any, Generic, Type, TypeVar
 
 # from icecream import ic  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
@@ -67,9 +67,6 @@ if hasattr(BaseModel, "custom_validate"):
     raise TypeError(
         "BaseModel already has a 'custom_validate' method. Please choose a different name for the custom validation method."
     )
-
-
-from typing import Generic
 
 
 @typechecked

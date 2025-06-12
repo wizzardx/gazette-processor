@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Callable, Optional, overload
 
 class IceCreamDebugger:
     def __init__(

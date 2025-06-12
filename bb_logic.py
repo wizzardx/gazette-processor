@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-from icecream import ic
 from typeguard import typechecked
 
 from src.ongoing_convo_with_bronn_2025_06_10.cached_llm import CachedLLM
@@ -18,6 +17,7 @@ cached_llm = CachedLLM()
 notice = get_notice_for_gg_num(
     gg_number=52724, notice_number=3228, cached_llm=cached_llm
 )
+
 
 print("# **JUTA'S WEEKLY STATUTES BULLETIN**")
 
@@ -153,3 +153,12 @@ print_notice(3229, 52725)
 
 # Department of Transport:
 print_notice(6220, 52726)
+
+# CURRENCY AND EXCHANGES ACT 9 OF 1933
+print_notice(3197, 52695)
+
+# MAGISTRATES' COURTS ACT 32 OF 1944
+print_notice(6219, 52723)
+
+# SUBDIVISION OF AGRICULTURAL LAND ACT 70 OF 1970
+print_notice(6214, 52712)

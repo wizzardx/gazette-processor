@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from PIL.Image import Image

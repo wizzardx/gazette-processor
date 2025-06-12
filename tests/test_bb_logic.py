@@ -1,10 +1,9 @@
-import json
 import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -184,7 +183,10 @@ class TestGetNoticeForGGNum:
         """Test parsing a valid PDF with expected format"""
         # Mock PDF text data
         mock_text = 'Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 2 N:B:The Government Printing Works will not:be held responsible for:the quality of "Hard Copies" or "Electronic Files submitted for publication purposes AIDS HELPLINE: 0800-0123-22 Prevention is the cure May\n2 No, 52724 IMPORTANT NOTICE: BE HELD RESPONSIBLE FOR ANY ERRORS THAT MIGHT OCCUR DUE To THE, SUBMISSION OF INCOMPLETE INCORRECT ILLEGIBLE COPY. Contents Gazette Page No. No. No. GENERAL NOTICES ALGEMENE KENNISGEWINGS Sports, Arts and Culture, Department of / Sport; Kuns en Kultuur; Departement van 3228 Draft National Policy on Heritage Memorialisation: Publication of notice to request public comment on-the draft National Policy Framework for Heritage Memorialisation _ 52724 3\ngovernment gazette staatskoerant general notices algemene kennisgewings department of sports, arts and culture Draft National Policy Framework for Heritage Memorialisation published for comment'
-        mock_locate.return_value = Path("test.pdf")
+        # Mock GgPdfs object
+        mock_gg_pdfs = MagicMock()
+        mock_gg_pdfs.path.return_value = Path("test.pdf")
+        mock_locate.return_value = mock_gg_pdfs
         mock_load_pdf.return_value = ScanInfo(plum_string=mock_text)
 
         # Test with specific GG and notice numbers
@@ -213,7 +215,10 @@ class TestGetNoticeForGGNum:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_invalid_pdf_format_page1(self, mock_load_pdf, mock_locate):
         """Test handling of PDF with invalid format on page 1"""
-        mock_locate.return_value = Path("test.pdf")
+        # Mock GgPdfs object
+        mock_gg_pdfs = MagicMock()
+        mock_gg_pdfs.path.return_value = Path("test.pdf")
+        mock_locate.return_value = mock_gg_pdfs
         mock_load_pdf.return_value = ScanInfo(
             plum_string="Invalid header text without expected format\nPage 2 text\nPage 3 text"
         )
@@ -231,7 +236,10 @@ class TestGetNoticeForGGNum:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_major_type(self, mock_load_pdf, mock_locate):
         """Test handling of unknown major type"""
-        mock_locate.return_value = Path("test.pdf")
+        # Mock GgPdfs object
+        mock_gg_pdfs = MagicMock()
+        mock_gg_pdfs.path.return_value = Path("test.pdf")
+        mock_locate.return_value = mock_gg_pdfs
         mock_load_pdf.return_value = ScanInfo(
             plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text"
         )
@@ -249,7 +257,10 @@ class TestGetNoticeForGGNum:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_unknown_minor_type(self, mock_load_pdf, mock_locate):
         """Test handling of unknown minor type"""
-        mock_locate.return_value = Path("test.pdf")
+        # Mock GgPdfs object
+        mock_gg_pdfs = MagicMock()
+        mock_gg_pdfs.path.return_value = Path("test.pdf")
+        mock_locate.return_value = mock_gg_pdfs
         mock_load_pdf.return_value = ScanInfo(
             plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department"
         )
@@ -269,8 +280,10 @@ class TestIntegration:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.load_or_scan_pdf_text")
     def test_full_workflow(self, mock_load_pdf, mock_locate):
         """Test the complete workflow from PDF to formatted output"""
-        # Mock PDF text directly as string
-        mock_locate.return_value = Path("test.pdf")
+        # Mock GgPdfs object
+        mock_gg_pdfs = MagicMock()
+        mock_gg_pdfs.path.return_value = Path("test.pdf")
+        mock_locate.return_value = mock_gg_pdfs
         mock_load_pdf.return_value = ScanInfo(
             plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture"
         )

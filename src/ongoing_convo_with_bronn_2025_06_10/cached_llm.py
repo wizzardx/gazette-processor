@@ -141,6 +141,7 @@ class SimpleOpenRouterSummarizer:
                         f"⚠️  Summary may be truncated (reached {max_tokens} token limit)"
                     )
 
+                assert isinstance(summary, str)
                 return summary
 
             except Exception as e:
@@ -168,17 +169,17 @@ class CacheManager:
         """Compute MD5 hash of input text"""
         return hashlib.md5(text.encode("utf-8")).hexdigest()
 
-    def _load_cache(self):
+    def _load_cache(self) -> None:
         """Load cache from file"""
         try:
-            with open(self.cache_file, "r", encoding="utf-8") as f:
+            with open(self.cache_file, "r", encoding="utf-8") as f:  # type: ignore[arg-type]
                 data = json.load(f)
                 self.cache = data.get("cache", {})
         except Exception as e:
             print(f"Warning: Could not load cache file: {e}")
             self.cache = {}
 
-    def _save_cache(self):
+    def _save_cache(self) -> None:
         """Save cache to file"""
         if not self.cache_file:
             return
@@ -211,11 +212,13 @@ class CacheManager:
             entry["last_accessed"] = time.time()
             entry["access_count"] = entry.get("access_count", 0) + 1
 
-            return entry["summary"]
+            summary = entry["summary"]
+            assert isinstance(summary, str)
+            return summary
 
         return None
 
-    def set(self, text: str, summary: str):
+    def set(self, text: str, summary: str) -> None:
         """Cache summary for text"""
         text_hash = self._compute_hash(text)
 
@@ -235,7 +238,7 @@ class CacheManager:
         # Save to file if configured
         self._save_cache()
 
-    def _evict_oldest(self):
+    def _evict_oldest(self) -> None:
         """Remove least recently used entries when cache is full"""
         if not self.cache:
             return
@@ -266,7 +269,7 @@ class CacheManager:
             "newest_entry": max(entry["created"] for entry in self.cache.values()),
         }
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all cached entries"""
         self.cache.clear()
         self._save_cache()
@@ -341,7 +344,7 @@ class CachedLLM:
             return cached_summary
 
         # Cache miss - call API
-        print(f"🌐 API call... (Cache misses: {self.stats['api_calls'] + 1})")
+        # print(f"🌐 API call... (Cache misses: {self.stats['api_calls'] + 1})")
 
         try:
             summary = self.summarizer.summarize(text)
@@ -387,12 +390,12 @@ class CachedLLM:
             "model": self.config.model,
         }
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear all cached summaries"""
         self.cache.clear()
         print("🗑️ Cache cleared")
 
-    def __str__(self):
+    def __str__(self) -> str:
         stats = self.get_stats()
         return (
             f"CachedLLM(model={self.config.model}, "
@@ -401,7 +404,7 @@ class CachedLLM:
         )
 
 
-def main():
+def main() -> None:
     """Example usage of CachedLLM"""
 
     # Sample texts
@@ -456,7 +459,7 @@ def main():
             print("-" * 40)
 
         # Show statistics
-        print(f"\n📊 Final Statistics:")
+        print("\n📊 Final Statistics:")
         stats = llm.get_stats()
 
         print(f"Total requests: {stats['requests']['total']}")
@@ -466,7 +469,7 @@ def main():
         print(f"Cache size: {stats['cache']['size']}")
         print(f"Estimated cost saved: ${stats['estimated_cost_saved']}")
 
-        print(f"\n✅ Demo completed!")
+        print("\n✅ Demo completed!")
         print(f"Final state: {llm}")
 
     except ValueError as e:
