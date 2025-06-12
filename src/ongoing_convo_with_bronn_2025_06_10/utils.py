@@ -44,12 +44,8 @@ class MajorType(Enum):
 #       that Bronnwyn gave me
 
 
-class ScanInfo(StrictBaseModel):
-    plum_string: str
-
-
 @typechecked
-def load_or_scan_pdf_text(p: Path) -> ScanInfo:
+def load_or_scan_pdf_text(p: Path) -> str:
     # Extract text using pdfplumber (first 5 pages by default)
     plum_text_pages = []
     with pdfplumber.open(p) as pdf:
@@ -67,7 +63,7 @@ def load_or_scan_pdf_text(p: Path) -> ScanInfo:
     if not plum_string:
         plum_string = "[No plumber text extracted]"  # Placeholder for empty content
 
-    return ScanInfo(plum_string=plum_string)
+    return plum_string
 
 
 GG_DIR = Path(
@@ -210,7 +206,7 @@ class Act(StrictBaseModel):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(scan_info: ScanInfo) -> Act:
+def decode_complex_pdf_type_minor(text: str) -> Act:
     # Over here, we work with types of eg:
     # - ROAD ACCIDENT FUND ACT 56 OF 1996
     # - SKILLS DEVELOPMENT ACT 97 OF 1998
@@ -230,8 +226,6 @@ def decode_complex_pdf_type_minor(scan_info: ScanInfo) -> Act:
     Raises:
         ValueError: If no act information is found in the text
     """
-    text = scan_info.plum_string
-
     # Pattern to match acts in the format: "NAME Act (NUMBER/YEAR)"
     pattern = r"([A-Za-z\s\-']+?)\s+Act\s+\((\d+)/(\d{4})\)"
 
@@ -270,7 +264,7 @@ def decode_complex_pdf_type_minor(scan_info: ScanInfo) -> Act:
             else:
                 # Special cases here. We need the plumbum line to be joined by
                 # spaces for this one, rather than newlines
-                s = scan_info.plum_string.replace("\n", " ")
+                s = text.replace("\n", " ")
                 if (
                     "with limited authority for the purpose of Exchange Control Regulations"
                     in s
@@ -309,6 +303,8 @@ def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
         return MajorType.GENERAL_NOTICE
     elif 6000 < pdf_gen_n_num < 7000:
         return MajorType.GOVERNMENT_NOTICE
+    elif 1 < pdf_gen_n_num < 1000:
+        return MajorType.BOARD_NOTICE
     else:
         raise ValueError(f"Unknown major type for notice number: {pdf_gen_n_num}")
     # Note: List of all of the abbreviations can be found in the footer of the docs
@@ -316,9 +312,7 @@ def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
 
 
 @typechecked
-def detect_pdf_year_num(scan_info: ScanInfo) -> int:
-    text = scan_info.plum_string
-
+def detect_pdf_year_num(text: str) -> int:
     # Find all 4-digit numbers using word boundaries
     pattern = r"\b\d{4}\b"
     matches = re.findall(pattern, text)
@@ -566,15 +560,269 @@ def detect_page_number(text: str) -> int:
 
 
 @typechecked
+def looks_like_pdf_with_long_list_of_notices(text: str) -> bool:
+    """
+    Check if the text contains 3 or more consecutive lines that start with 4-digit numbers.
+
+    Args:
+        text (str): The input text to check
+
+    Returns:
+        bool: True if there are 3+ consecutive lines starting with 4-digit numbers, False otherwise
+    """
+    # Split the text into lines
+    lines = text.split("\n")
+
+    # Pattern to match a line starting with exactly 4 digits followed by whitespace or non-digit
+    pattern = re.compile(r"^(\d{4})(?:\s|[^\d])")
+
+    consecutive_count = 0
+    max_consecutive = 0
+
+    for line in lines:
+        # Strip leading/trailing whitespace for checking
+        trimmed_line = line.strip()
+
+        # Check if line starts with 4-digit number
+        if trimmed_line and pattern.match(trimmed_line):
+            consecutive_count += 1
+            max_consecutive = max(max_consecutive, consecutive_count)
+        else:
+            # Reset counter if line doesn't match pattern
+            consecutive_count = 0
+
+    return max_consecutive >= 3
+
+
+def parse_gazette_document(text: str) -> list[dict[str, Any]]:
+    """
+    Parse a complete gazette document and return structured data.
+
+    Args:
+        text: The full gazette document text
+
+    Returns:
+        List of dictionaries, where each dictionary contains:
+        - logical_line (str): The complete joined line
+        - notice_number (int): The 4-digit notice number
+        - law_description (str): What the law is about (e.g., "Subdivision of Agricultural Land")
+        - law_number (int or None): Number of the law within the year (e.g., 70)
+        - law_year (int or None): Year the law was for (e.g., 1970)
+        - gazette_number (int): Gazette number (e.g., 52712)
+        - page_number (int): Page number (e.g., 14)
+        - notice_description (str): The human-readable description of the notice
+          (e.g., "Intention for the exclusion of certain properties from the provisions
+           of the subdivision of the Act in various municipalities within the
+           Republic of South Africa (30 days notice for comments)")
+    """
+    # First, join split logical lines
+    logical_lines = _extract_logical_lines(text)
+
+    # Parse each logical line into structured data
+    parsed_entries = []
+    for line in logical_lines:
+        entry = _parse_single_entry(line)
+        if entry:
+            parsed_entries.append(entry)
+
+    return parsed_entries
+
+
+def _extract_logical_lines(text: str) -> list[str]:
+    """
+    Internal function to join split logical lines into single lines.
+    """
+    lines = text.split("\n")
+    logical_lines = []
+    current_logical_line: list[str] = []
+    in_logical_line = False
+
+    # Pattern to match the start of a logical line (4-digit code at line start)
+    start_pattern = re.compile(r"^\d{4}\s+")
+
+    # Pattern to match the end of a logical line (dots followed by numbers)
+    end_pattern = re.compile(r"\.{3,}\s+\d+\s+\d+\s*$")
+
+    for line in lines:
+        # Check if this line starts a new logical line
+        if start_pattern.match(line):
+            # If we were already building a logical line, save it first
+            if current_logical_line:
+                logical_lines.append(" ".join(current_logical_line))
+
+            # Start new logical line
+            current_logical_line = [line.strip()]
+            in_logical_line = True
+
+            # Check if this line also ends the logical line (single-line entry)
+            if end_pattern.search(line):
+                logical_lines.append(" ".join(current_logical_line))
+                current_logical_line = []
+                in_logical_line = False
+
+        elif in_logical_line:
+            # Continue building the current logical line
+            current_logical_line.append(line.strip())
+
+            # Check if this line ends the logical line
+            if end_pattern.search(line):
+                logical_lines.append(" ".join(current_logical_line))
+                current_logical_line = []
+                in_logical_line = False
+
+    # Don't forget any remaining logical line
+    if current_logical_line:
+        logical_lines.append(" ".join(current_logical_line))
+
+    return logical_lines
+
+
+def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
+    """
+    Internal function to parse a single logical line into structured data.
+    """
+    # Pattern to extract all components
+    # Groups: (1) notice_number (2) content before dots (3) gazette_number (4) page_number
+    main_pattern = re.compile(r"^(\d{4})\s+(.+?)\.{3,}\s+(\d+)\s+(\d+)\s*$")
+
+    match = main_pattern.match(logical_line)
+    if not match:
+        return None
+
+    notice_number = int(match.group(1))
+    content = match.group(2).strip()
+    gazette_number = int(match.group(3))
+    page_number = int(match.group(4))
+
+    # Extract law information from content
+    # Pattern to find Act name and number/year
+    # Looking for pattern like "Land Reform (Labour Tenants) Act (3/1996)"
+    act_pattern = re.compile(r"^(.+?)\s+Act\s*\((\d+)/(\d{4})\)")
+
+    act_match = act_pattern.search(content)
+
+    if act_match:
+        law_description = act_match.group(1).strip()
+        law_number = int(act_match.group(2))
+        law_year = int(act_match.group(3))
+
+        # Extract the notice description (everything after the Act info)
+        # Find where the Act match ends
+        act_end = act_match.end()
+        remaining_content = content[act_end:].strip()
+
+        # Remove any parenthetical abbreviations like ("the LTA")
+        remaining_content = re.sub(
+            r'\s*\(["\'].*?["\']\)\s*', " ", remaining_content
+        ).strip()
+
+        # Remove leading colons and whitespace
+        notice_description = remaining_content.lstrip(":").strip()
+    else:
+        # Fallback for entries that don't match the expected pattern
+        law_description = content.split(":")[0].strip() if ":" in content else content
+        law_number = None
+        law_year = None
+
+        # For non-standard entries, try to extract description after first colon
+        if ":" in content:
+            notice_description = content.split(":", 1)[1].strip()
+        else:
+            notice_description = content
+
+    return {
+        "logical_line": logical_line,
+        "notice_number": notice_number,
+        "law_description": law_description,
+        "law_number": law_number,
+        "law_year": law_year,
+        "gazette_number": gazette_number,
+        "page_number": page_number,
+        "notice_description": notice_description,
+    }
+
+
+@typechecked
+def get_notice_for_gg_from_pdf_text_with_long_list_of_notices(
+    text: str, gg_number: int, notice_number: int, cached_llm: CachedLLM
+) -> Notice:
+    # Parse our text into a conveniant structure for handling in this function:
+    rows = parse_gazette_document(text)
+
+    # Find the matching notice:
+    match = None
+    for row in rows:
+        if row["notice_number"] == notice_number:
+            assert match is None
+            match = row
+    assert match is not None
+
+    # Some sanity checks
+    assert match["gazette_number"] == gg_number
+    assert match["notice_number"] == notice_number
+
+    pdf_monthday_num = detect_monthday_num(text)
+    pdf_monthname_en_str = detect_monthday_en_str(text)
+    pdf_year_num = detect_pdf_year_num(text)
+    pdf_page_num = match["page_number"]
+    pdf_issn_num = detect_issn_num(text)
+    pdf_type_major = detect_major_type_from_notice_number(notice_number)
+    pdf_type_minor = detect_minor_pdf_type(text)
+    pdf_text = cached_llm.summarize(match["notice_description"])
+
+    return Notice(
+        gen_n_num=notice_number,
+        gg_num=gg_number,
+        monthday_num=pdf_monthday_num,
+        month_name=pdf_monthname_en_str,
+        year=pdf_year_num,
+        page=pdf_page_num,
+        issn_num=pdf_issn_num,
+        type_major=pdf_type_major,
+        type_minor=pdf_type_minor,
+        text=pdf_text,
+    )
+
+
+def detect_minor_pdf_type(text: str) -> str:
+    # Determine the minor type by searching the full text
+    full_text_lower = text.lower()
+    if "department of sports, arts and culture" in full_text_lower:
+        return "Department of Sports, Arts and Culture"
+    elif "national astro-tourism" in full_text_lower:
+        return "Department of Tourism"
+    elif "department of transport" in full_text_lower:
+        return "Department of Transport"
+    elif "authority for the purpose of exchange control" in full_text_lower:
+        return "CURRENCY AND EXCHANGES ACT 9 OF 1933"
+    else:
+        # Over here, we work with types of eg:
+        # - ROAD ACCIDENT FUND ACT 56 OF 1996
+        # - SKILLS DEVELOPMENT ACT 97 OF 1998
+        # - COMPETITION ACT 89 OF 1998
+        act = decode_complex_pdf_type_minor(text)
+        return f"{act.whom} ACT {act.number} of {act.year}"
+
+
+@typechecked
 def get_notice_for_gg(
     p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
 ) -> Notice:
     # Grab all text from the PDF file:
     ic(p)
-    scan_info = load_or_scan_pdf_text(p)
-    text = scan_info.plum_string
+    text = load_or_scan_pdf_text(p)
 
-    # Sometimes this is a type of GG that lists
+    # Does this look like a PDF that has a long of notices in it?
+    if looks_like_pdf_with_long_list_of_notices(text):
+        return get_notice_for_gg_from_pdf_text_with_long_list_of_notices(
+            text=text,
+            gg_number=gg_number,
+            notice_number=notice_number,
+            cached_llm=cached_llm,
+        )
+
+    # Otherwise, it looks like this is a regular PDF.
+    # assert 0
 
     # print("```")
     # print(text)
@@ -674,23 +922,9 @@ def get_notice_for_gg(
     #     raise ValueError("Unable to determine a Notice Number")
     pdf_type_major = detect_major_type_from_notice_number(notice_number)
 
-    # Determine the minor type by searching the full text
-    full_text_lower = text.lower()
-    if "department of sports, arts and culture" in full_text_lower:
-        pdf_type_minor = "Department of Sports, Arts and Culture"
-    elif "national astro-tourism" in full_text_lower:
-        pdf_type_minor = "Department of Tourism"
-    elif "department of transport" in full_text_lower:
-        pdf_type_minor = "Department of Transport"
-    elif "authority for the purpose of exchange control" in full_text_lower:
-        pdf_type_minor = "CURRENCY AND EXCHANGES ACT 9 OF 1933"
-    else:
-        # Over here, we work with types of eg:
-        # - ROAD ACCIDENT FUND ACT 56 OF 1996
-        # - SKILLS DEVELOPMENT ACT 97 OF 1998
-        # - COMPETITION ACT 89 OF 1998
-        act = decode_complex_pdf_type_minor(scan_info)
-        pdf_type_minor = f"{act.whom} ACT {act.number} of {act.year}"
+    # Next detect the "minor" type.
+    pdf_type_minor = detect_minor_pdf_type(text=text)
+
     #
     # # Extract the notice description text
     # # Find the gen_n_num in the contents section and get text after it

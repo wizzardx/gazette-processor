@@ -15,7 +15,6 @@ from pydantic import ValidationError
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     MajorType,
     Notice,
-    ScanInfo,
     get_notice_for_gg_num,
     load_or_scan_pdf_text,
 )
@@ -139,9 +138,9 @@ class TestLoadOrScanPdfText:
 
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
-        # Check result is ScanInfo object
-        assert isinstance(result, ScanInfo)
-        assert result.plum_string == "Plumber Page 1\nPlumber Page 2"
+        # Check result is a string
+        assert isinstance(result, str)
+        assert result == "Plumber Page 1\nPlumber Page 2"
 
         # Note: The current implementation doesn't create cache files anymore
 
@@ -158,8 +157,8 @@ class TestLoadOrScanPdfText:
         result = load_or_scan_pdf_text(Path("test.pdf"))
 
         # Check result format
-        assert isinstance(result, ScanInfo)
-        assert result.plum_string == "Plumber Page 1 from cache test"
+        assert isinstance(result, str)
+        assert result == "Plumber Page 1 from cache test"
 
     @patch("pdfplumber.open")
     def test_cache_directory_creation(self, mock_pdfplumber_open):
@@ -171,7 +170,7 @@ class TestLoadOrScanPdfText:
 
         # Note: Current implementation doesn't create cache directory
         result = load_or_scan_pdf_text(Path("test.pdf"))
-        assert isinstance(result, ScanInfo)
+        assert isinstance(result, str)
 
 
 class TestGetNoticeForGGNum:
@@ -187,7 +186,7 @@ class TestGetNoticeForGGNum:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = ScanInfo(plum_string=mock_text)
+        mock_load_pdf.return_value = mock_text
 
         # Test with specific GG and notice numbers
         # Create a mock cached_llm
@@ -219,8 +218,8 @@ class TestGetNoticeForGGNum:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = ScanInfo(
-            plum_string="Invalid header text without expected format\nPage 2 text\nPage 3 text"
+        mock_load_pdf.return_value = (
+            "Invalid header text without expected format\nPage 2 text\nPage 3 text"
         )
 
         with pytest.raises(
@@ -240,9 +239,7 @@ class TestGetNoticeForGGNum:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = ScanInfo(
-            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text"
-        )
+        mock_load_pdf.return_value = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text"
 
         with pytest.raises(
             ValueError, match="No act information found in the provided text"
@@ -261,9 +258,7 @@ class TestGetNoticeForGGNum:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = ScanInfo(
-            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department"
-        )
+        mock_load_pdf.return_value = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\ngeneral notices algemene kennisgewings unknown department"
 
         with pytest.raises(ValueError, match="No act information found"):
             mock_cached_llm = MagicMock()
@@ -284,9 +279,7 @@ class TestIntegration:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = ScanInfo(
-            plum_string="Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture"
-        )
+        mock_load_pdf.return_value = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Draft National Policy on Heritage Memorialisation: Publication of notice _ 52724 3\ngeneral notices algemene kennisgewings department of sports, arts and culture"
 
         mock_cached_llm = MagicMock()
         mock_cached_llm.summarize.return_value = (
