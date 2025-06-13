@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Any, Optional
 
@@ -5,6 +6,8 @@ from typeguard import typechecked
 
 from .cached_llm import CachedLLM
 from .common_types import MajorType, Notice
+
+logger = logging.getLogger(__name__)
 
 
 @typechecked
@@ -101,9 +104,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
 
     match = main_pattern.match(logical_line)
     if not match:
-        print("------------")
-        print(logical_line)
-        print("------------")
+        logger.debug("Failed to match line pattern:")
+        logger.debug(logical_line)
+        logger.debug("------------")
         assert 0
         return None
 
@@ -223,9 +226,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         # Remove leading colons and whitespace
         notice_description = remaining_content.lstrip(":").strip()
     else:
-        print("-----------")
-        print(logical_line)
-        print("-----------")
+        logger.debug("Unable to extract Act details from line:")
+        logger.debug(logical_line)
+        logger.debug("-----------")
         raise ValueError("Unable to extract Act details from a string")
 
     return {

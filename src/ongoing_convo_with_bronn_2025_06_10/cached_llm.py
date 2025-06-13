@@ -22,6 +22,7 @@ Usage:
 
 import hashlib
 import json
+import logging
 import os
 import time
 from datetime import datetime
@@ -31,6 +32,8 @@ from typing import Any, Dict, List, Optional
 import anthropic
 from anthropic.types import MessageParam, TextBlock
 from environs import Env
+
+logger = logging.getLogger(__name__)
 
 
 class ClaudeConfig:
@@ -117,15 +120,15 @@ Summary:""",
 
                 # If first attempt was truncated and doesn't end properly, try again
                 if is_truncated and not ends_properly and attempt == 0:
-                    print(
-                        f"🔄 Summary truncated, retrying with {int(self.config.max_tokens * 1.4)} tokens..."
+                    logger.info(
+                        f"Summary truncated, retrying with {int(self.config.max_tokens * 1.4)} tokens..."
                     )
                     continue
 
                 # Provide feedback on final result
                 if is_truncated:
-                    print(
-                        f"⚠️  Summary may be truncated (reached {max_tokens} token limit)"
+                    logger.warning(
+                        f"Summary may be truncated (reached {max_tokens} token limit)"
                     )
 
                 assert isinstance(summary, str)
@@ -163,7 +166,7 @@ class CacheManager:
                 data = json.load(f)
                 self.cache = data.get("cache", {})
         except Exception as e:
-            print(f"Warning: Could not load cache file: {e}")
+            logger.warning(f"Could not load cache file: {e}")
             self.cache = {}
 
     def _save_cache(self) -> None:
@@ -186,7 +189,7 @@ class CacheManager:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
         except Exception as e:
-            print(f"Warning: Could not save cache file: {e}")
+            logger.warning(f"Could not save cache file: {e}")
 
     def get(self, text: str) -> Optional[str]:
         """Get cached summary for text"""
@@ -352,7 +355,7 @@ class CachedLLM:
             return summary
 
         except Exception as e:
-            print(f"❌ Error during summarization: {e}")
+            logger.error(f"Error during summarization: {e}")
             raise
 
     def get_stats(self) -> Dict[str, Any]:
@@ -380,7 +383,7 @@ class CachedLLM:
     def clear_cache(self) -> None:
         """Clear all cached summaries"""
         self.cache.clear()
-        print("🗑️ Cache cleared")
+        logger.info("Cache cleared")
 
     def __str__(self) -> str:
         stats = self.get_stats()

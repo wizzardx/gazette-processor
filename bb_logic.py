@@ -1,6 +1,7 @@
 #!/bin/env python
 
 import json
+from logging import getLogger
 from pathlib import Path
 
 from icecream import ic
@@ -12,6 +13,8 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
     Notice,
     get_notice_for_gg_num,
 )
+
+logger = getLogger(__name__)
 
 cached_llm = CachedLLM()
 
@@ -26,7 +29,7 @@ notice = get_notice_for_gg_num(
 )
 
 if notice is None:
-    print("WARNING: The first Notice was disabled for debug purposes.")
+    logger.warning("The first Notice was disabled for debug purposes.")
     print()
 
 print("# **JUTA'S WEEKLY STATUTES BULLETIN**")
@@ -109,18 +112,18 @@ def _compare_against_json_serialization(gg_number: int, notice: Notice):
 
         # Compare the current notice with the cached version
         if j != cached_notice:
-            print(f"WARNING: Notice for GG {gg_number} has changed since last cache!")
-            print(f"Cached: {cached_notice}")
-            print(f"Current: {j}")
+            logger.warning(f"Notice for GG {gg_number} has changed since last cache!")
+            logger.debug(f"Cached: {cached_notice}")
+            logger.debug(f"Current: {j}")
             # assert 0
         else:
-            print(f"Notice for GG {gg_number} matches cached version.")
+            logger.info(f"Notice for GG {gg_number} matches cached version.")
     else:
         # Create the cache file for next time
         cache_dir.mkdir(exist_ok=True)
         with open(cache_file, "w") as f:
             json.dump(j, f, indent=2)
-        print(f"Created cache file for GG {gg_number} at {cache_file}")
+        logger.info(f"Created cache file for GG {gg_number} at {cache_file}")
 
 
 @typechecked
@@ -221,3 +224,83 @@ assert print_notice(260, 52705) == (
     "SPECIAL INVESTIGATING UNITS AND SPECIAL TRIBUNALS ACT 74 OF 1996",
     "(Proc 260 in GG 52705 of 23 May 2025) (p24)",
 )
+
+# And then a bunch of others over here:
+MORE_NUMBERS = """
+    6215  52712
+    261   52720
+
+    3220  52712
+    3221  52712
+    3222  52712
+
+    6208  52698
+
+    6202  52691
+
+    3219  52712
+
+    783   52691
+
+    3194   52691
+
+    3199   52697
+
+    6213   52711
+
+    3218   52712
+
+    6212   52710
+
+    6217  52712
+
+    6216  52712
+
+    3201   52701
+
+    6210   52704
+
+"""
+
+
+notices_with_technical_issues = []
+
+for line in MORE_NUMBERS.split("\n"):
+    line = line.strip()
+    if not line:
+        continue
+    split = line.split()
+    assert len(split) == 2, repr(split)
+    notice_num = int(split[0])
+    gg_num = int(split[1])
+    try:
+        print_notice(notice_num, gg_num)
+    except Exception as e:
+        logger.exception(
+            f"There was a problem processing Notice {notice_num} in Government Gazette {gg_num}: {e!r}"
+        )
+        notices_with_technical_issues.append((notice_num, gg_num))
+
+
+print()
+print("ABBREVIATIONS:")
+print(
+    "GG (Government Gazette), GenN (General Notice), GN (Government Notice), BN (Board Notice), Proc (Proclamation), PG (Provincial Gazette), PN (Provincial Notice), PremN (Premier's Notice), ON (Official Notice), LAN (Local Authority Notice), MN (Municipal Notice)"
+)
+print()
+print("Compiled by Juta's Statutes Editors - © Juta and Company (Pty) Ltd")
+print("PO BOX 24299 LANSDOWNE 7779 TEL:")
+print("(021) 659 2300 E-MAIL:")
+print("statutes@juta.co.za")
+print()
+
+if notices_with_technical_issues:
+    print()
+    print(
+        f"NB: There were {len(notices_with_technical_issues)} Notices with technical issues:"
+    )
+    print()
+    for notice in notices_with_technical_issues:
+        print(f"- Notice {notice[0]} of {notice[1]}")
+        print()
+    print()

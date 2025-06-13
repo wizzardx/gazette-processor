@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sys
@@ -15,6 +16,8 @@ sys.path.append(
 )
 
 from icecream import ic
+
+logger = logging.getLogger(__name__)
 
 from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
@@ -289,9 +292,9 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                         )
                     else:
                         # ic()
-                        print("----------------------")
-                        print(s)
-                        print("----------------------")
+                        logger.debug("No act information found in text:")
+                        logger.debug(s)
+                        logger.debug("----------------------")
                         raise ValueError(
                             "No act information found in the provided text"
                         )
