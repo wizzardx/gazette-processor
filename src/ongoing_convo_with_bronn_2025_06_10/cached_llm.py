@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-CachedLLM Wrapper for OpenRouter Summarizer - Clean Version
-==========================================================
+CachedLLM Wrapper for Claude API - Clean Version
+================================================
 
-A simple, cached wrapper around OpenRouterSummarizer that:
+A simple, cached wrapper around Claude API that:
 1. Provides sensible defaults
 2. Offers a single summarize(text) -> summary method
 3. Caches results based on MD5 hash to avoid duplicate API calls
 4. Uses comprehensive few-shot examples for clean output
 
 Installation:
-    pip install requests environs
+    pip install anthropic environs
 
 Usage:
     from cached_llm import CachedLLM
@@ -26,13 +26,14 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-import requests
+import anthropic
+from anthropic.types import MessageParam, TextBlock
 from environs import Env
 
 
-class OpenRouterConfig:
+class ClaudeConfig:
     """Simplified config class with sensible defaults"""
 
     def __init__(self, env_file: str = ".env"):
@@ -41,36 +42,27 @@ class OpenRouterConfig:
             self.env.read_env(env_file, override=True)
 
         # Required settings
-        self.api_key = self.env.str("OPENROUTER_API_KEY", "")
+        self.api_key = self.env.str("ANTHROPIC_API_KEY", "")
 
         # Sensible defaults optimized for cost/performance
-        self.model = self.env.str("OPENROUTER_MODEL", "anthropic/claude-3-haiku")
+        self.model = self.env.str("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
         self.max_tokens = self.env.int(
             "MAX_TOKENS", 250
         )  # Increased to reduce truncation
         self.temperature = self.env.float("TEMPERATURE", 0.1)
-        self.base_url = self.env.str(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1/chat/completions"
-        )
 
         if not self.api_key:
             raise ValueError(
-                "OPENROUTER_API_KEY is required. Set it in .env file or environment."
+                "ANTHROPIC_API_KEY is required. Set it in .env file or environment."
             )
 
 
-class SimpleOpenRouterSummarizer:
-    """Simplified OpenRouter client focused on summarization"""
+class SimpleClaudeSummarizer:
+    """Simplified Claude client focused on summarization"""
 
-    def __init__(self, config: OpenRouterConfig):
+    def __init__(self, config: ClaudeConfig):
         self.config = config
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            }
-        )
+        self.client = anthropic.Anthropic(api_key=config.api_key)
 
     def summarize(self, text: str) -> str:
         """Summarize text and return just the summary string"""
@@ -79,53 +71,48 @@ class SimpleOpenRouterSummarizer:
         for attempt, max_tokens in enumerate(
             [self.config.max_tokens, int(self.config.max_tokens * 1.4)]
         ):
-            payload = {
-                "model": self.config.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a text summarization tool. Start immediately with the summary content. Never use introductory phrases. IMPORTANT: Always end with complete sentences and proper punctuation. If you're running out of space, prioritize finishing your current sentence rather than starting a new one.",
-                    },
-                    {
-                        "role": "user",
-                        "content": "Text: Solar and wind power have become increasingly cost-competitive with fossil fuels over the past decade. Many countries are investing heavily in renewable infrastructure development. However, energy storage challenges remain a significant barrier to widespread adoption of these technologies.\n\nSummary:",
-                    },
-                    {
-                        "role": "assistant",
-                        "content": "Solar and wind power have become cost-competitive with fossil fuels, prompting heavy investment in renewable infrastructure by many countries. Energy storage challenges remain a significant barrier to widespread adoption.",
-                    },
-                    {
-                        "role": "user",
-                        "content": "Text: The European Union has announced new regulations for artificial intelligence systems that will take effect in 2025. These regulations will classify AI systems into different risk categories based on their potential impact on safety and fundamental rights. High-risk AI applications, such as those used in healthcare, transportation, and law enforcement, will face stricter oversight and compliance requirements. Companies will need to conduct risk assessments, implement quality management systems, and ensure human oversight. The regulations aim to balance innovation with consumer protection while establishing the EU as a global leader in AI governance.\n\nSummary:",
-                    },
-                    {
-                        "role": "assistant",
-                        "content": "The European Union has announced new AI regulations taking effect in 2025 that classify systems into risk categories based on safety and rights impact. High-risk applications in healthcare, transportation, and law enforcement will face stricter oversight, requiring companies to conduct risk assessments, implement quality management, and ensure human oversight. The regulations aim to balance innovation with consumer protection while establishing EU leadership in AI governance.",
-                    },
-                    {
-                        "role": "user",
-                        "content": "Text: Climate change represents one of the most pressing challenges of our time, with far-reaching implications for global ecosystems, human societies, and economic systems. The increasing concentration of greenhouse gases in the atmosphere, primarily carbon dioxide from fossil fuel combustion, is causing global temperatures to rise at an unprecedented rate. This warming trend is leading to melting ice caps, rising sea levels, and more frequent extreme weather events including hurricanes, droughts, and flooding. The impacts are already visible across the globe, from prolonged droughts in some regions to intense flooding in others, affecting agricultural productivity and water resources. Scientific consensus indicates that immediate action is required to reduce emissions and transition to renewable energy sources. Governments, businesses, and individuals all have roles to play in addressing this crisis through policy reforms, technological innovation, and changes in consumption patterns.\n\nSummary:",
-                    },
-                    {
-                        "role": "assistant",
-                        "content": "Climate change poses pressing challenges to global ecosystems, societies, and economies due to rising greenhouse gas concentrations causing unprecedented temperature increases. This leads to melting ice caps, rising sea levels, and extreme weather events including hurricanes, droughts, and flooding that affect agricultural productivity and water resources. Scientific consensus emphasizes the urgent need for emission reductions and renewable energy transitions through coordinated action by governments, businesses, and individuals via policy reforms, technological innovation, and consumption changes.",
-                    },
-                    {"role": "user", "content": f"Text: {text}\n\nSummary:"},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": self.config.temperature,
-            }
+            messages: List[MessageParam] = [
+                {
+                    "role": "user",
+                    "content": f"""I need you to summarize the following text. Start immediately with the summary content. Never use introductory phrases. IMPORTANT: Always end with complete sentences and proper punctuation. If you're running out of space, prioritize finishing your current sentence rather than starting a new one.
+
+Here are some examples:
+
+Text: Solar and wind power have become increasingly cost-competitive with fossil fuels over the past decade. Many countries are investing heavily in renewable infrastructure development. However, energy storage challenges remain a significant barrier to widespread adoption of these technologies.
+
+Summary: Solar and wind power have become cost-competitive with fossil fuels, prompting heavy investment in renewable infrastructure by many countries. Energy storage challenges remain a significant barrier to widespread adoption.
+
+Text: The European Union has announced new regulations for artificial intelligence systems that will take effect in 2025. These regulations will classify AI systems into different risk categories based on their potential impact on safety and fundamental rights. High-risk AI applications, such as those used in healthcare, transportation, and law enforcement, will face stricter oversight and compliance requirements. Companies will need to conduct risk assessments, implement quality management systems, and ensure human oversight. The regulations aim to balance innovation with consumer protection while establishing the EU as a global leader in AI governance.
+
+Summary: The European Union has announced new AI regulations taking effect in 2025 that classify systems into risk categories based on safety and rights impact. High-risk applications in healthcare, transportation, and law enforcement will face stricter oversight, requiring companies to conduct risk assessments, implement quality management, and ensure human oversight. The regulations aim to balance innovation with consumer protection while establishing EU leadership in AI governance.
+
+Now please summarize this text:
+
+Text: {text}
+
+Summary:""",
+                }
+            ]
 
             try:
-                response = self.session.post(self.config.base_url, json=payload)
-                response.raise_for_status()
-                result = response.json()
+                response = self.client.messages.create(
+                    model=self.config.model,
+                    max_tokens=max_tokens,
+                    temperature=self.config.temperature,
+                    messages=messages,
+                )
 
-                summary = result["choices"][0]["message"]["content"].strip()
-                finish_reason = result.get("choices", [{}])[0].get("finish_reason", "")
+                # Handle union type properly - only TextBlock has text attribute
+                first_block = response.content[0]
+                if isinstance(first_block, TextBlock):
+                    summary = first_block.text.strip()
+                else:
+                    raise RuntimeError(
+                        f"Unexpected response block type: {type(first_block)}"
+                    )
 
-                # Check if truncated and summary doesn't end properly
-                is_truncated = finish_reason == "length"
+                # Check if truncated based on stop reason
+                is_truncated = response.stop_reason == "max_tokens"
                 ends_properly = summary and summary[-1] in ".!?"
 
                 # If first attempt was truncated and doesn't end properly, try again
@@ -146,7 +133,7 @@ class SimpleOpenRouterSummarizer:
 
             except Exception as e:
                 if attempt == 1:  # Final attempt failed
-                    raise RuntimeError(f"OpenRouter API error: {e}")
+                    raise RuntimeError(f"Claude API error: {e}")
                 continue
 
         # Should not reach here
@@ -299,8 +286,8 @@ class CachedLLM:
         """
 
         # Initialize components
-        self.config = OpenRouterConfig(env_file)
-        self.summarizer = SimpleOpenRouterSummarizer(self.config)
+        self.config = ClaudeConfig(env_file)
+        self.summarizer = SimpleClaudeSummarizer(self.config)
         self.cache = CacheManager(cache_file, max_cache_size)
 
         # Stats tracking
@@ -475,7 +462,7 @@ def main() -> None:
     except ValueError as e:
         print(f"❌ Configuration error: {e}")
         print("\nCreate a .env file with:")
-        print("OPENROUTER_API_KEY=your_api_key_here")
+        print("ANTHROPIC_API_KEY=your_api_key_here")
 
     except Exception as e:
         print(f"❌ Error: {e}")

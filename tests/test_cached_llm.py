@@ -9,25 +9,25 @@ import pytest
 from src.ongoing_convo_with_bronn_2025_06_10.cached_llm import (
     CachedLLM,
     CacheManager,
-    OpenRouterConfig,
-    SimpleOpenRouterSummarizer,
+    ClaudeConfig,
+    SimpleClaudeSummarizer,
 )
 
 
-class TestOpenRouterConfig:
-    """Tests for OpenRouterConfig class"""
+class TestClaudeConfig:
+    """Tests for ClaudeConfig class"""
 
     def test_config_with_env_file(self):
         """Test config loading from env file"""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
-            f.write("OPENROUTER_API_KEY=test_key\n")
-            f.write("OPENROUTER_MODEL=test_model\n")
+            f.write("ANTHROPIC_API_KEY=test_key\n")
+            f.write("ANTHROPIC_MODEL=test_model\n")
             f.write("MAX_TOKENS=500\n")
             f.write("TEMPERATURE=0.5\n")
             f.flush()
 
             try:
-                config = OpenRouterConfig(env_file=f.name)
+                config = ClaudeConfig(env_file=f.name)
                 assert config.api_key == "test_key"
                 assert config.model == "test_model"
                 assert config.max_tokens == 500
@@ -37,113 +37,109 @@ class TestOpenRouterConfig:
 
     def test_config_defaults(self):
         """Test config with defaults when env file doesn't exist"""
-        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test_key"}, clear=True):
-            config = OpenRouterConfig(env_file="nonexistent.env")
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test_key"}, clear=True):
+            config = ClaudeConfig(env_file="nonexistent.env")
             assert config.api_key == "test_key"
-            assert config.model == "anthropic/claude-3-haiku"
+            assert config.model == "claude-3-haiku-20240307"
             assert config.max_tokens == 250
             assert config.temperature == 0.1
-            assert config.base_url == "https://openrouter.ai/api/v1/chat/completions"
 
     def test_config_missing_api_key(self):
         """Test config raises error when API key is missing"""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="OPENROUTER_API_KEY is required"):
-                OpenRouterConfig(env_file="nonexistent.env")
+            with pytest.raises(ValueError, match="ANTHROPIC_API_KEY is required"):
+                ClaudeConfig(env_file="nonexistent.env")
 
 
-class TestSimpleOpenRouterSummarizer:
-    """Tests for SimpleOpenRouterSummarizer class"""
+class TestSimpleClaudeSummarizer:
+    """Tests for SimpleClaudeSummarizer class"""
 
     def test_summarizer_initialization(self):
         """Test summarizer initialization with config"""
         config = MagicMock()
         config.api_key = "test_key"
 
-        summarizer = SimpleOpenRouterSummarizer(config)
+        summarizer = SimpleClaudeSummarizer(config)
         assert summarizer.config == config
-        assert summarizer.session.headers["Authorization"] == "Bearer test_key"
-        assert summarizer.session.headers["Content-Type"] == "application/json"
+        assert hasattr(summarizer, "client")
 
-    @patch("requests.Session.post")
-    def test_summarize_success(self, mock_post):
+    @patch("anthropic.Anthropic")
+    def test_summarize_success(self, mock_anthropic):
         """Test successful summarization"""
         config = MagicMock()
         config.api_key = "test_key"
         config.model = "test_model"
         config.max_tokens = 250
         config.temperature = 0.1
-        config.base_url = "https://api.example.com"
 
+        mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [
-                {"message": {"content": "This is a summary"}, "finish_reason": "stop"}
-            ]
-        }
-        mock_post.return_value = mock_response
+        # Create a proper TextBlock mock
+        from anthropic.types import TextBlock
 
-        summarizer = SimpleOpenRouterSummarizer(config)
+        mock_text_block = MagicMock(spec=TextBlock)
+        mock_text_block.text = "This is a summary"
+        mock_response.content = [mock_text_block]
+        mock_response.stop_reason = "end_turn"
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.return_value = mock_client
+
+        summarizer = SimpleClaudeSummarizer(config)
         result = summarizer.summarize("Long text to summarize")
 
         assert result == "This is a summary"
-        mock_post.assert_called_once()
+        mock_client.messages.create.assert_called_once()
 
-    @patch("requests.Session.post")
-    def test_summarize_truncated_retry(self, mock_post):
+    @patch("anthropic.Anthropic")
+    def test_summarize_truncated_retry(self, mock_anthropic):
         """Test retry when summary is truncated"""
         config = MagicMock()
         config.api_key = "test_key"
         config.model = "test_model"
         config.max_tokens = 250
         config.temperature = 0.1
-        config.base_url = "https://api.example.com"
+
+        mock_client = MagicMock()
 
         # First response - truncated
+        from anthropic.types import TextBlock
+
         mock_response1 = MagicMock()
-        mock_response1.json.return_value = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "This is a truncated summary that doesn't end properly"
-                    },
-                    "finish_reason": "length",
-                }
-            ]
-        }
+        mock_text_block1 = MagicMock(spec=TextBlock)
+        mock_text_block1.text = "This is a truncated summary that doesn't end properly"
+        mock_response1.content = [mock_text_block1]
+        mock_response1.stop_reason = "max_tokens"
 
         # Second response - complete
         mock_response2 = MagicMock()
-        mock_response2.json.return_value = {
-            "choices": [
-                {
-                    "message": {"content": "This is a complete summary."},
-                    "finish_reason": "stop",
-                }
-            ]
-        }
+        mock_text_block2 = MagicMock(spec=TextBlock)
+        mock_text_block2.text = "This is a complete summary."
+        mock_response2.content = [mock_text_block2]
+        mock_response2.stop_reason = "end_turn"
 
-        mock_post.side_effect = [mock_response1, mock_response2]
+        mock_client.messages.create.side_effect = [mock_response1, mock_response2]
+        mock_anthropic.return_value = mock_client
 
-        summarizer = SimpleOpenRouterSummarizer(config)
+        summarizer = SimpleClaudeSummarizer(config)
         result = summarizer.summarize("Long text to summarize")
 
         assert result == "This is a complete summary."
-        assert mock_post.call_count == 2
+        assert mock_client.messages.create.call_count == 2
 
-    @patch("requests.Session.post")
-    def test_summarize_api_error(self, mock_post):
+    @patch("anthropic.Anthropic")
+    def test_summarize_api_error(self, mock_anthropic):
         """Test API error handling"""
         config = MagicMock()
         config.api_key = "test_key"
-        config.base_url = "https://api.example.com"
         config.max_tokens = 250
 
-        mock_post.side_effect = Exception("API Error")
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = Exception("API Error")
+        mock_anthropic.return_value = mock_client
 
-        summarizer = SimpleOpenRouterSummarizer(config)
+        summarizer = SimpleClaudeSummarizer(config)
 
-        with pytest.raises(RuntimeError, match="OpenRouter API error"):
+        with pytest.raises(RuntimeError, match="Claude API error"):
             summarizer.summarize("Text to summarize")
 
 
@@ -272,7 +268,7 @@ class TestCacheManager:
 class TestCachedLLM:
     """Tests for CachedLLM class"""
 
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_cached_llm_initialization(self, mock_config_class):
         """Test CachedLLM initialization"""
         mock_config = MagicMock()
@@ -286,10 +282,8 @@ class TestCachedLLM:
         assert llm.stats["cache_hits"] == 0
         assert llm.stats["api_calls"] == 0
 
-    @patch(
-        "src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleOpenRouterSummarizer"
-    )
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleClaudeSummarizer")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_summarize_empty_text(self, mock_config_class, mock_summarizer_class):
         """Test summarize with empty text"""
         mock_config = MagicMock()
@@ -302,10 +296,8 @@ class TestCachedLLM:
         assert llm.summarize("   ") == ""
         assert llm.stats["total_requests"] == 0  # Empty requests don't count
 
-    @patch(
-        "src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleOpenRouterSummarizer"
-    )
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleClaudeSummarizer")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_summarize_cache_miss(self, mock_config_class, mock_summarizer_class):
         """Test summarize with cache miss"""
         mock_config = MagicMock()
@@ -324,10 +316,8 @@ class TestCachedLLM:
         assert llm.stats["cache_hits"] == 0
         assert llm.stats["api_calls"] == 1
 
-    @patch(
-        "src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleOpenRouterSummarizer"
-    )
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleClaudeSummarizer")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_summarize_cache_hit(self, mock_config_class, mock_summarizer_class):
         """Test summarize with cache hit"""
         mock_config = MagicMock()
@@ -353,10 +343,8 @@ class TestCachedLLM:
         assert llm.stats["api_calls"] == 1
         mock_summarizer.summarize.assert_called_once()
 
-    @patch(
-        "src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleOpenRouterSummarizer"
-    )
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.SimpleClaudeSummarizer")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_summarize_error_handling(self, mock_config_class, mock_summarizer_class):
         """Test summarize error handling"""
         mock_config = MagicMock()
@@ -372,7 +360,7 @@ class TestCachedLLM:
         with pytest.raises(Exception, match="API Error"):
             llm.summarize("Test text")
 
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_get_stats(self, mock_config_class):
         """Test getting statistics"""
         mock_config = MagicMock()
@@ -389,7 +377,7 @@ class TestCachedLLM:
         assert "cache" in stats
         assert "estimated_cost_saved" in stats
 
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_clear_cache(self, mock_config_class):
         """Test cache clearing"""
         mock_config = MagicMock()
@@ -404,7 +392,7 @@ class TestCachedLLM:
         llm.clear_cache()
         assert llm.cache.get("test") is None
 
-    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.OpenRouterConfig")
+    @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.ClaudeConfig")
     def test_str_representation(self, mock_config_class):
         """Test string representation"""
         mock_config = MagicMock()
@@ -452,7 +440,7 @@ class TestMain:
     @patch("src.ongoing_convo_with_bronn_2025_06_10.cached_llm.CachedLLM")
     def test_main_config_error(self, mock_cached_llm_class):
         """Test main function with configuration error"""
-        mock_cached_llm_class.side_effect = ValueError("OPENROUTER_API_KEY is required")
+        mock_cached_llm_class.side_effect = ValueError("ANTHROPIC_API_KEY is required")
 
         from src.ongoing_convo_with_bronn_2025_06_10.cached_llm import main
 

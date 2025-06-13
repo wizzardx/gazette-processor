@@ -18,6 +18,9 @@ from icecream import ic
 
 from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
+from .pdf_parser_multi_leading_r_notice import (
+    get_notice_leading_r_from_multi_notice_pdf,
+)
 from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
 from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
@@ -98,6 +101,7 @@ class GgPdfs:
         return self._path
 
     def add_path(self, p: Path) -> None:
+        # ic(p)
         parsed = parse_gg_filename(p.name)
         if parsed is not None:
             assert self._path is None
@@ -179,16 +183,8 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
     # And assuming it does, then in theory we have our page number next:
     return int(page_split[5])
 
-
 @typechecked
 def decode_complex_pdf_type_minor(text: str) -> Act:
-    # Over here, we work with types of eg:
-    # - ROAD ACCIDENT FUND ACT 56 OF 1996
-    # - SKILLS DEVELOPMENT ACT 97 OF 1998
-    # - COMPETITION ACT 89 OF 1998
-    # - Currency and Exchanges-Act; 1933 (Act No: 9 of 1933)
-    # https://claude.ai/chat/e5658a66-f818-46a3-a6fb-af63a4c7968c
-
     """
     Extract act information from legal text.
 
@@ -201,55 +197,82 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
     Raises:
         ValueError: If no act information is found in the text
     """
+    # First check for specific patterns like "Magistrates' Courts Act"
+    # This handles both straight and curly apostrophes
+    magistrates_pattern = r"Magistrates[''] Courts Act \((\d+)/(\d{4})\)"
+    match_magistrates = re.search(magistrates_pattern, text, re.IGNORECASE)
+
+    if match_magistrates:
+        # ic()
+        number = int(match_magistrates.group(1))
+        year = int(match_magistrates.group(2))
+        return Act(whom="Magistrates' Courts", year=year, number=number)
+
     # Pattern to match acts in the format: "NAME Act (NUMBER/YEAR)"
-    pattern = r"([A-Za-z\s\-']+?)\s+Act\s+\((\d+)/(\d{4})\)"
+    # Updated to handle various apostrophes and Unicode characters
+    # Using \u2019 for right single quotation mark
+    pattern = r"([A-Za-z\s\-'''\u2019]+?)\s+Act\s+\((\d+)/(\d{4})\)"
 
     match = re.search(pattern, text, re.IGNORECASE)
 
     if match:
+        # ic()
         whom = match.group(1).strip()
         number = int(match.group(2))
         year = int(match.group(3))
 
+        # Special check: if we only captured "Courts" but "Magistrates" appears before it
+        if whom.lower() == "courts":
+            # Look for "Magistrates" before this match
+            match_start = match.start()
+            text_before = text[:match_start]
+            if text_before.lower().endswith(
+                "magistrates' "
+            ) or text_before.lower().endswith("magistrates' "):
+                whom = "Magistrates' Courts"
+
         return Act(whom=whom, year=year, number=number)
     else:
+        # ic()
         # Pattern for format: "NAME-Act; YEAR (Act No: NUMBER of YEAR)"
-        pattern_semicolon = (
-            r"([A-Za-z\s\-']+?)-Act;\s+(\d{4})\s+\(Act\s+No:?\s+(\d+)\s+of\s+\d{4}\)"
-        )
+        pattern_semicolon = r"([A-Za-z\s\-'''\u2019]+?)-Act;\s+(\d{4})\s+\(Act\s+No:?\s+(\d+)\s+of\s+\d{4}\)"
         match_semicolon = re.search(pattern_semicolon, text, re.IGNORECASE)
 
         if match_semicolon:
+            # ic()
             whom = match_semicolon.group(1).strip()
             year = int(match_semicolon.group(2))
             number = int(match_semicolon.group(3))
 
             return Act(whom=whom, year=year, number=number)
         else:
+            # ic()
             # Pattern for format: "[NUMBER] NAME Act, No. NUMBER of YEAR"
-            pattern_no_format = (
-                r"(?:\d+\s+)?([A-Za-z\s\-']+?)\s+Act,\s+No\.\s+(\d+)\s+of\s+(\d{4})"
-            )
+            pattern_no_format = r"(?:\d+\s+)?([A-Za-z\s\-'''\u2019]+?)\s+Act,\s+No\.\s+(\d+)\s+of\s+(\d{4})"
             match_no_format = re.search(pattern_no_format, text, re.IGNORECASE)
 
             if match_no_format:
+                # ic()
                 whom = match_no_format.group(1).strip()
                 number = int(match_no_format.group(2))
                 year = int(match_no_format.group(3))
 
                 return Act(whom=whom, year=year, number=number)
             else:
+                # ic()
                 # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
-                pattern_old = r"([A-Z'][A-Z\s']+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+                pattern_old = r"([A-Z''\u2019][A-Z\s'''\u2019]+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
                 match_old = re.search(pattern_old, text, re.IGNORECASE)
 
                 if match_old:
+                    # ic()
                     whom = match_old.group(1).strip()
                     year = int(match_old.group(2))
                     number = int(match_old.group(3))
 
                     return Act(whom=whom, year=year, number=number)
                 else:
+                    # ic()
                     # Special cases here. We need the plumbum line to be joined by
                     # spaces for this one, rather than newlines
                     s = text.replace("\n", " ")
@@ -257,19 +280,20 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                         "with limited authority for the purpose of Exchange Control Regulations"
                         in s
                     ):
+                        # ic()
                         return Act(
                             whom="Currency and Exchanges",
                             number=9,
                             year=1933,
                         )
                     else:
+                        # ic()
                         print("----------------------")
                         print(s)
                         print("----------------------")
                         raise ValueError(
                             "No act information found in the provided text"
                         )
-
 
 @typechecked
 def looks_like_pdf_gen_n_num(n: int) -> bool:
@@ -287,14 +311,17 @@ def looks_like_pdf_page_num(n: int) -> bool:
 
 
 def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
-    if 2000 < pdf_gen_n_num < 3000:
+    n = pdf_gen_n_num
+    # Bronnwyn said this recently:
+    # "Number range: Currently I believe Procs in the 200s, BNs in the 700s, GenNs in the 3000s and GNs in the 7000s"
+    if 200 <= n < 300:
+        return MajorType.PROCLAMATION
+    elif 700 <= n < 800:
         return MajorType.BOARD_NOTICE
-    if 3000 < pdf_gen_n_num < 4000:
+    if 3000 <= n < 4000:
         return MajorType.GENERAL_NOTICE
-    elif 6000 < pdf_gen_n_num < 7000:
+    elif 6000 <= n < 7000:
         return MajorType.GOVERNMENT_NOTICE
-    elif 1 < pdf_gen_n_num < 1000:
-        return MajorType.BOARD_NOTICE
     else:
         raise ValueError(f"Unknown major type for notice number: {pdf_gen_n_num}")
     # Note: List of all of the abbreviations can be found in the footer of the docs
@@ -581,7 +608,40 @@ def looks_like_pdf_with_long_list_of_notices(text: str) -> bool:
             # Reset counter if line doesn't match pattern
             consecutive_count = 0
 
+    # print("------------")
+    # print(text)
+    # print("------------")
+    #
     return max_consecutive >= 3
+
+
+@typechecked
+def looks_like_pdf_with_r_leading_notices(text: str) -> bool:
+    """
+    Scan text to check if it contains more than one line starting with
+    'R. ' followed by a 3-digit number and a space.
+
+    Args:
+        text: The text content to scan
+
+    Returns:
+        True if more than one matching line is found, False otherwise
+    """
+    # Pattern: start of line, "R. ", exactly 3 digits, then a space
+    pattern = r"^R\. \d{3} "
+
+    # Split text into lines and count matches
+    lines = text.split("\n")
+    match_count = 0
+
+    for line in lines:
+        if re.match(pattern, line.strip()):
+            match_count += 1
+            # Early return if we found more than one
+            if match_count > 1:
+                return True
+
+    return False
 
 
 def detect_minor_pdf_type(text: str) -> str:
@@ -619,6 +679,16 @@ def get_notice_for_gg(
             notice_number=notice_number,
             cached_llm=cached_llm,
         )
+
+    elif looks_like_pdf_with_r_leading_notices(text):
+        # Otherwise, does it look like a list of notices with "R. " in front?
+        return get_notice_leading_r_from_multi_notice_pdf(
+            text=text,
+            gg_number=gg_number,
+            notice_number=notice_number,
+            cached_llm=cached_llm,
+        )
+
     else:
         # Otherwise, it's a regular single-notice PDF
         return get_notice_from_single_notice_pdf(

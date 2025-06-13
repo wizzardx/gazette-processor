@@ -14,10 +14,19 @@ from src.ongoing_convo_with_bronn_2025_06_10.utils import (
 
 cached_llm = CachedLLM()
 
+# Placeholder value for cases where the `notice =` line is comented out.` during
+# development
+notice = None
+
+# We can comment out the below assignment during development to assist with
+# debugging.
 notice = get_notice_for_gg_num(
     gg_number=52724, notice_number=3228, cached_llm=cached_llm
 )
 
+if notice is None:
+    print("WARNING: The first Notice was disabled for debug purposes.")
+    print()
 
 print("# **JUTA'S WEEKLY STATUTES BULLETIN**")
 
@@ -33,7 +42,8 @@ print()
 # eg minor: Department of Sports, Arts and Culture:
 # /type_major, type_minor = get_notice_type(notice.gen_n_num)
 
-print(f"*ISSN {notice.issn_num}*")
+if notice is not None:
+    print(f"*ISSN {notice.issn_num}*")
 
 
 @typechecked
@@ -46,13 +56,13 @@ def to_bb_header_str(t: MajorType) -> str:
 
 print()
 # print("PROCLAMATIONS AND NOTICES")
-to_bb_header_str = to_bb_header_str(notice.type_major)
-print(f"## **{to_bb_header_str}**")
-print()
-# print("Department of Sports, Arts and Culture:")
-print(f"### **{notice.type_minor}**")
-print()
-
+if notice is not None:
+    to_bb_header_str = to_bb_header_str(notice.type_major)
+    print(f"## **{to_bb_header_str}**")
+    print()
+    # print("Department of Sports, Arts and Culture:")
+    print(f"### **{notice.type_minor}**")
+    print()
 
 # print(f"Draft National Policy Framework for Heritage Memorialisation published for comment (GenN 3228 in GG 52724 of 23 May 2025) (p3)")
 
@@ -64,17 +74,19 @@ def get_notice_type_abbr(t: MajorType) -> str:
         MajorType.GENERAL_NOTICE: "GenN",
         MajorType.GOVERNMENT_NOTICE: "GN",
         MajorType.BOARD_NOTICE: "BN",
+        MajorType.PROCLAMATION: "Proc",
     }[t]
 
     # Note: List of all of the abbreviations can be found in the footer of the docs
     #       that Bronnwyn gave me
 
 
-notice_type_major_abbr = get_notice_type_abbr(notice.type_major)
+if notice is not None:
+    notice_type_major_abbr = get_notice_type_abbr(notice.type_major)
 
-print(
-    f"{notice.text}\n\n({notice_type_major_abbr} {notice.gen_n_num} in GG {notice.gg_num} of {notice.monthday_num} {notice.month_name} {notice.year}) (p{notice.page})"
-)
+    print(
+        f"{notice.text}\n\n({notice_type_major_abbr} {notice.gen_n_num} in GG {notice.gg_num} of {notice.monthday_num} {notice.month_name} {notice.year}) (p{notice.page})"
+    )
 
 print()
 
@@ -173,5 +185,5 @@ print_notice(3227, 52722)
 # ROAD ACCIDENT FUND ACT 56 OF 1996
 print_notice(786, 52691)
 
-# # SPECIAL INVESTIGATING UNITS AND SPECIAL TRIBUNALS ACT 74 OF 1996
-# print_notice(260, 52705)
+# SPECIAL INVESTIGATING UNITS AND SPECIAL TRIBUNALS ACT 74 OF 1996
+print_notice(260, 52705)

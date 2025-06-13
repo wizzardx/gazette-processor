@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from validation_helpers import StrictBaseModel
+from .validation_helpers import StrictBaseModel
 
 
 class Notice(StrictBaseModel):
@@ -21,6 +21,7 @@ class MajorType(Enum):
     BOARD_NOTICE = "BOARD_NOTICE"
     GENERAL_NOTICE = "GENERAL_NOTICE"
     GOVERNMENT_NOTICE = "GOVERNMENT_NOTICE"
+    PROCLAMATION = "PROCLAMATION"
 
 
 class Act(StrictBaseModel):
