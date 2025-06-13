@@ -265,7 +265,8 @@ def get_notice_leading_r_from_multi_notice_pdf(
     for row in rows:
         if row["notice_number"] == notice_number:
             if match is not None:
-                print(f"Notice #{notice_number} was seen multiple times")
+                # print(f"Notice #{notice_number} was seen multiple times")
+                pass
             else:
                 # We work with the first version in our report (often English)
                 match = row

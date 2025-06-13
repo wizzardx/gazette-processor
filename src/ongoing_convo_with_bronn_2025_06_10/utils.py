@@ -183,6 +183,7 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
     # And assuming it does, then in theory we have our page number next:
     return int(page_split[5])
 
+
 @typechecked
 def decode_complex_pdf_type_minor(text: str) -> Act:
     """
@@ -294,6 +295,7 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                         raise ValueError(
                             "No act information found in the provided text"
                         )
+
 
 @typechecked
 def looks_like_pdf_gen_n_num(n: int) -> bool:

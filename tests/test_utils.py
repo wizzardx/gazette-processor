@@ -166,8 +166,9 @@ class TestDetectMajorTypeFromNoticeNumber:
 
     def test_board_notice_range(self):
         """Test board notice detection"""
-        assert detect_major_type_from_notice_number(2500) == MajorType.BOARD_NOTICE
-        assert detect_major_type_from_notice_number(500) == MajorType.BOARD_NOTICE
+        assert detect_major_type_from_notice_number(750) == MajorType.BOARD_NOTICE
+        assert detect_major_type_from_notice_number(700) == MajorType.BOARD_NOTICE
+        assert detect_major_type_from_notice_number(799) == MajorType.BOARD_NOTICE
 
     def test_general_notice_range(self):
         """Test general notice detection"""
