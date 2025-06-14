@@ -275,7 +275,7 @@ class CachedLLM:
 
     def __init__(
         self,
-        cache_file: str = ".llm_cache.json",
+        cache_file: str = "cache/llm_cache.json",
         max_cache_size: int = 1000,
         env_file: str = ".env",
     ):
