@@ -277,6 +277,7 @@ for item in csvreader:
     try:
         print_notice(notice_num, gg_num)
     except Exception as e:
+        raise  # TODO: Remove this line.
         logger.exception(
             f"There was a problem processing Notice {notice_num} in Government Gazette {gg_num}: {e!r}"
         )
@@ -296,9 +297,10 @@ print1("statutes@juta.co.za")
 print1()
 
 if notices_with_technical_issues:
+    print1("## **NOTICES WITH TECHNICAL ISSUES**")
     print1()
     print1(
-        f"NB: There were {len(notices_with_technical_issues)} Notices with technical issues:"
+        f"NB: There were {len(notices_with_technical_issues)} Notices with technical issues in the Government Gazettes. Please check these manually."
     )
     print1()
     for notice in notices_with_technical_issues:

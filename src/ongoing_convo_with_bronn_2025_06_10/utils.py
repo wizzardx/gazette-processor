@@ -168,6 +168,7 @@ def get_notice_for_gg_num(
 ) -> Notice:
     pdf_info = locate_gg_pdf_by_number(gg_number)
     p = pdf_info.path()
+    ic(p)
     return get_notice_for_gg(
         p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
     )
@@ -218,6 +219,9 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
 
 class UnableToGetActInfo(ValueError):
     pass
+
+
+##########
 
 
 @typechecked
@@ -297,40 +301,56 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                 return Act(whom=whom, year=year, number=number)
             else:
                 # ic()
-                # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
-                pattern_old = r"([A-Z''\u2019][A-Z\s'''\u2019]+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
-                match_old = re.search(pattern_old, text, re.IGNORECASE)
+                # Pattern for format: "NAME Act, YEAR (Act No. NUMBER of YEAR)"
+                pattern_year_paren = r"(?:\d+\s+)?([A-Za-z\s\-'''\u2019]+?)\s+Act,\s+(\d{4})\s+\(Act\s+No\.\s+(\d+)\s+of\s+\d{4}\)"
+                match_year_paren = re.search(pattern_year_paren, text, re.IGNORECASE)
 
-                if match_old:
+                if match_year_paren:
                     # ic()
-                    whom = match_old.group(1).strip()
-                    year = int(match_old.group(2))
-                    number = int(match_old.group(3))
+                    whom = match_year_paren.group(1).strip()
+                    year = int(match_year_paren.group(2))
+                    number = int(match_year_paren.group(3))
 
                     return Act(whom=whom, year=year, number=number)
                 else:
                     # ic()
-                    # Special cases here. We need the plumbum line to be joined by
-                    # spaces for this one, rather than newlines
-                    s = text.replace("\n", " ")
-                    if (
-                        "with limited authority for the purpose of Exchange Control Regulations"
-                        in s
-                    ):
+                    # Fallback pattern for the older format: "NAME ACT, YEAR (ACT NO: NUMBER OF YEAR)"
+                    pattern_old = r"([A-Z''\u2019][A-Z\s'''\u2019]+?)\s+ACT,?\s+(\d{4})\s+\(ACT\s+NO:?\s+(\d+)\s+OF\s+\d{4}\)"
+                    match_old = re.search(pattern_old, text, re.IGNORECASE)
+
+                    if match_old:
                         # ic()
-                        return Act(
-                            whom="Currency and Exchanges",
-                            number=9,
-                            year=1933,
-                        )
+                        whom = match_old.group(1).strip()
+                        year = int(match_old.group(2))
+                        number = int(match_old.group(3))
+
+                        return Act(whom=whom, year=year, number=number)
                     else:
-                        ic()
-                        print2("----------------------")
-                        print2(s)
-                        print2("----------------------")
-                        raise UnableToGetActInfo(
-                            "No act information found in the provided text"
-                        )
+                        # ic()
+                        # Special cases here. We need the plumbum line to be joined by
+                        # spaces for this one, rather than newlines
+                        s = text.replace("\n", " ")
+                        if (
+                            "with limited authority for the purpose of Exchange Control Regulations"
+                            in s
+                        ):
+                            # ic()
+                            return Act(
+                                whom="Currency and Exchanges",
+                                number=9,
+                                year=1933,
+                            )
+                        else:
+                            ic()
+                            print2("----------------------")
+                            print2(s)
+                            print2("----------------------")
+                            raise UnableToGetActInfo(
+                                "No act information found in the provided text"
+                            )
+
+
+##########
 
 
 @typechecked
@@ -694,6 +714,12 @@ def detect_minor_pdf_type(text: str) -> str:
         return "Department of Transport"
     elif "authority for the purpose of exchange control" in full_text_lower:
         return "CURRENCY AND EXCHANGES ACT 9 OF 1933"
+    elif "state information technology act" in full_text_lower:
+        return "STATE INFORMATION TECHNOLOGY AGENCY ACT 88 OF 1998"
+    elif "state information technology act" in full_text_lower:
+        return "STATE INFORMATION TECHNOLOGY AGENCY ACT 88 OF 1998"
+    elif "mineral resources development bill" in full_text_lower:
+        return "BILL"
     else:
         # Over here, we work with types of eg:
         # - ROAD ACCIDENT FUND ACT 56 OF 1996
