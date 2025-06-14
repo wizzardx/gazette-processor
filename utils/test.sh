@@ -6,11 +6,11 @@ rye run black .
 rye fmt
 rye run mypy --strict src/ongoing_convo_with_bronn_2025_06_10/*.py
 rye run pytest tests/ --cov=bb_logic --cov-report=term-missing
-rye run python bb_logic.py
+rye run python bb_logic.py bulletin
 
 # Everything built, so try to make a PDF and view it:
 
-rye run python bb_logic.py > output/output.md
+rye run python bb_logic.py bulletin > output/output.md
 
 # Output to PDF:
 pandoc -o output/output.pdf output/output.md \

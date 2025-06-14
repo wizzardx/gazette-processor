@@ -5,6 +5,7 @@ import json
 from logging import getLogger
 from pathlib import Path
 
+import click
 from icecream import ic
 from typeguard import typechecked
 
@@ -305,5 +306,17 @@ def output_testing_bulletin() -> None:
         print1()
 
 
-if __name__ == "__main__":
+@click.group()
+def cli():
+    """Government gazette notice processing system."""
+    pass
+
+
+@cli.command()
+def bulletin():
+    """Generate a testing bulletin from notices.csv."""
     output_testing_bulletin()
+
+
+if __name__ == "__main__":
+    cli()
