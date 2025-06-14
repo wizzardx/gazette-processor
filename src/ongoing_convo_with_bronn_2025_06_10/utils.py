@@ -99,12 +99,15 @@ def parse_gg_filename(filename: str) -> Optional[dict[str, Any]]:
     """
     Parse filename with pattern: gg{number}_{date}.pdf
 
+    Supports both abbreviated (e.g., "23May2025") and full month names (e.g., "20February2025")
+
     Returns:
         dict with 'gg_number' and 'publish_date' keys if pattern matches
         None if pattern doesn't match
     """
     # Pattern: gg followed by digits, underscore, date, .pdf
-    pattern = r"^gg(\d+)_(\d{1,2}[A-Za-z]{3}\d{4})\.pdf$"
+    # Changed [A-Za-z]{3} to [A-Za-z]+ to allow variable-length month names
+    pattern = r"^gg(\d+)_(\d{1,2}[A-Za-z]+\d{4})\.pdf$"
 
     match = re.match(pattern, filename)
 
@@ -112,14 +115,16 @@ def parse_gg_filename(filename: str) -> Optional[dict[str, Any]]:
         gg_number = int(match.group(1))
         date_string = match.group(2)
 
-        try:
-            # Parse the date (e.g., "23May2025")
-            publish_date = datetime.strptime(date_string, "%d%b%Y")
+        # Try parsing with full month name first, then abbreviated
+        for date_format in ["%d%B%Y", "%d%b%Y"]:
+            try:
+                publish_date = datetime.strptime(date_string, date_format)
+                return {"gg_number": gg_number, "publish_date": publish_date}
+            except ValueError:
+                continue
 
-            return {"gg_number": gg_number, "publish_date": publish_date}
-        except ValueError:
-            # Invalid date format
-            return None
+        # If neither format worked, return None
+        return None
     else:
         return None
 
@@ -144,7 +149,8 @@ class GgPdfs:
             self._gg_number = parsed["gg_number"]
             self._publish_date = parsed["publish_date"]
         else:
-            assert 0
+            # Unable to parse the filename?
+            assert 0, repr(p.name)
 
     # assert 0
     # if result is not None:
@@ -214,7 +220,10 @@ def output_testing_bulletin() -> None:
 
     @typechecked
     def to_bb_header_str(t: MajorType) -> str:
-        return {MajorType.GENERAL_NOTICE: "PROCLAMATIONS AND NOTICES"}[t]
+        return {
+            MajorType.GENERAL_NOTICE: "PROCLAMATIONS AND NOTICES",
+            MajorType.BOARD_NOTICE: "BOARD NOTICE",
+        }[t]
 
         # Note: List of all of the abbreviations can be found in the footer of the docs
         #       that Bronnwyn gave me
