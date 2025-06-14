@@ -168,7 +168,6 @@ def get_notice_for_gg_num(
 ) -> Notice:
     pdf_info = locate_gg_pdf_by_number(gg_number)
     p = pdf_info.path()
-    ic(p)
     return get_notice_for_gg(
         p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
     )
@@ -740,7 +739,6 @@ def detect_minor_pdf_type(text: str) -> str:
 def get_notice_for_gg(
     p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
 ) -> Notice:
-    ic(p)
     # Grab all text from the PDF file:
     text = load_or_scan_pdf_text(p)
 
