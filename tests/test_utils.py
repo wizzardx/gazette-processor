@@ -2,7 +2,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
 
@@ -467,8 +467,36 @@ class TestLoadOrScanPdfText:
         mock_pdf.pages = [mock_page1, mock_page2]
         mock_pdfplumber.return_value.__enter__.return_value = mock_pdf
 
-        result = load_or_scan_pdf_text(Path("test.pdf"))
-        assert result == "Page 1 text\nPage 2 text"
+        # Create a mock that handles both binary and text file operations
+        file_contents = {
+            "test.pdf": b"fake pdf content",  # Binary mode for hash calculation
+        }
+
+        def mock_open_func(file_path, mode="r", *args, **kwargs):
+            mock_file = MagicMock()
+            if mode == "rb":
+                mock_file.read.return_value = file_contents.get(str(file_path), b"")
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+            else:
+                # Write operations for cache
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+
+        # Mock tempfile operations
+        mock_temp_file = MagicMock()
+        mock_temp_file.name = "/tmp/mockfile"
+        mock_temp_file.__enter__.return_value = mock_temp_file
+
+        with (
+            patch("builtins.open", side_effect=mock_open_func),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.mkdir"),
+            patch("tempfile.NamedTemporaryFile", return_value=mock_temp_file),
+            patch("pathlib.Path.replace"),
+        ):
+            result = load_or_scan_pdf_text(Path("test.pdf"))
+            assert result == "Page 1 text\nPage 2 text"
 
     @patch("pdfplumber.open")
     def test_empty_pdf(self, mock_pdfplumber):
@@ -477,8 +505,36 @@ class TestLoadOrScanPdfText:
         mock_pdf.pages = []
         mock_pdfplumber.return_value.__enter__.return_value = mock_pdf
 
-        result = load_or_scan_pdf_text(Path("test.pdf"))
-        assert result == "[No plumber text extracted]"
+        # Create a mock that handles both binary and text file operations
+        file_contents = {
+            "test.pdf": b"fake pdf content",  # Binary mode for hash calculation
+        }
+
+        def mock_open_func(file_path, mode="r", *args, **kwargs):
+            mock_file = MagicMock()
+            if mode == "rb":
+                mock_file.read.return_value = file_contents.get(str(file_path), b"")
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+            else:
+                # Write operations for cache
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+
+        # Mock tempfile operations
+        mock_temp_file = MagicMock()
+        mock_temp_file.name = "/tmp/mockfile"
+        mock_temp_file.__enter__.return_value = mock_temp_file
+
+        with (
+            patch("builtins.open", side_effect=mock_open_func),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.mkdir"),
+            patch("tempfile.NamedTemporaryFile", return_value=mock_temp_file),
+            patch("pathlib.Path.replace"),
+        ):
+            result = load_or_scan_pdf_text(Path("test.pdf"))
+            assert result == "[No plumber text extracted]"
 
     @patch("pdfplumber.open")
     def test_more_than_five_pages(self, mock_pdfplumber):
@@ -492,10 +548,38 @@ class TestLoadOrScanPdfText:
         mock_pdf.pages = pages
         mock_pdfplumber.return_value.__enter__.return_value = mock_pdf
 
-        result = load_or_scan_pdf_text(Path("test.pdf"))
-        # Should only have first 5 pages
-        expected = "\n".join([f"Page {i + 1} text" for i in range(5)])
-        assert result == expected
+        # Create a mock that handles both binary and text file operations
+        file_contents = {
+            "test.pdf": b"fake pdf content",  # Binary mode for hash calculation
+        }
+
+        def mock_open_func(file_path, mode="r", *args, **kwargs):
+            mock_file = MagicMock()
+            if mode == "rb":
+                mock_file.read.return_value = file_contents.get(str(file_path), b"")
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+            else:
+                # Write operations for cache
+                mock_file.__enter__.return_value = mock_file
+                return mock_file
+
+        # Mock tempfile operations
+        mock_temp_file = MagicMock()
+        mock_temp_file.name = "/tmp/mockfile"
+        mock_temp_file.__enter__.return_value = mock_temp_file
+
+        with (
+            patch("builtins.open", side_effect=mock_open_func),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.mkdir"),
+            patch("tempfile.NamedTemporaryFile", return_value=mock_temp_file),
+            patch("pathlib.Path.replace"),
+        ):
+            result = load_or_scan_pdf_text(Path("test.pdf"))
+            # Should only have first 5 pages
+            expected = "\n".join([f"Page {i + 1} text" for i in range(5)])
+            assert result == expected
 
 
 class TestGetNoticeForGg:

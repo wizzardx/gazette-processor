@@ -3,7 +3,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -123,6 +123,7 @@ class TestLoadOrScanPdfText:
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir)
 
+    @patch("builtins.open", mock_open(read_data=b"fake pdf content"))
     @patch("pdfplumber.open")
     def test_load_or_scan_first_time(self, mock_pdfplumber_open):
         """Test loading PDF for the first time (no cache)"""
@@ -143,6 +144,7 @@ class TestLoadOrScanPdfText:
 
         # Note: The current implementation doesn't create cache files anymore
 
+    @patch("builtins.open", mock_open(read_data=b"fake pdf content"))
     @patch("pdfplumber.open")
     def test_load_from_cache(self, mock_pdfplumber_open):
         """Test loading from cache when it exists"""
@@ -159,6 +161,7 @@ class TestLoadOrScanPdfText:
         assert isinstance(result, str)
         assert result == "Plumber Page 1 from cache test"
 
+    @patch("builtins.open", mock_open(read_data=b"fake pdf content"))
     @patch("pdfplumber.open")
     def test_cache_directory_creation(self, mock_pdfplumber_open):
         """Test that cache directory is created if it doesn't exist"""
@@ -238,15 +241,13 @@ class TestGetNoticeForGGNum:
         mock_gg_pdfs = MagicMock()
         mock_gg_pdfs.path.return_value = Path("test.pdf")
         mock_locate.return_value = mock_gg_pdfs
-        mock_load_pdf.return_value = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 3228 Some text _ 52724 3\nunknown type text"
+        mock_load_pdf.return_value = "Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May\n2 No, 52724 Contents 9999 Some text _ 52724 3\nunknown type text"
 
-        with pytest.raises(
-            ValueError, match="No act information found in the provided text"
-        ):
+        with pytest.raises(ValueError, match="Unknown major type for notice number"):
             mock_cached_llm = MagicMock()
             mock_cached_llm.summarize.return_value = "Unknown type text"
             get_notice_for_gg_num(
-                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+                gg_number=52724, notice_number=9999, cached_llm=mock_cached_llm
             )
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")

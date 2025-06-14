@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from icecream import ic
 
 from src.ongoing_convo_with_bronn_2025_06_10.cached_llm import (
     CachedLLM,
@@ -432,7 +433,9 @@ class TestMain:
         from src.ongoing_convo_with_bronn_2025_06_10.cached_llm import main
 
         # Should not raise any exceptions
+        ic()
         main()
+        ic()
 
         # Verify summarize was called 3 times (as per sample_texts)
         assert mock_llm.summarize.call_count == 3

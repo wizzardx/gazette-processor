@@ -1,7 +1,9 @@
+import hashlib
 import logging
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -16,6 +18,8 @@ sys.path.append(
 )
 
 from icecream import ic
+
+from .prints import print1, print2
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,22 @@ from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
 @typechecked
 def load_or_scan_pdf_text(p: Path) -> str:
+    # Create cache directory if it doesn't exist
+    cache_dir = Path("cache")
+    cache_dir.mkdir(exist_ok=True)
+
+    # Calculate MD5 hash of the file contents
+    with open(p, "rb") as f:
+        file_hash = hashlib.md5(f.read()).hexdigest()
+
+    # Create cache file path based on hash
+    cache_file = cache_dir / f"{file_hash}.txt"
+
+    # Check if cached result exists
+    if cache_file.exists():
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return f.read()
+
     # Extract text using pdfplumber (first 5 pages by default)
     plum_text_pages = []
     with pdfplumber.open(p) as pdf:
@@ -45,10 +65,19 @@ def load_or_scan_pdf_text(p: Path) -> str:
                 plum_text_pages.append(text)
 
     plum_string = "\n".join(plum_text_pages)
-
     # Ensure plum_string is not empty (StrictBaseModel requires min length 1)
     if not plum_string:
         plum_string = "[No plumber text extracted]"  # Placeholder for empty content
+
+    # Save to cache using a temporary file for atomic writes
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=cache_dir, delete=False
+    ) as tmp_file:
+        tmp_file.write(plum_string)
+        tmp_path = Path(tmp_file.name)
+
+    # Atomically move the temporary file to the final location
+    tmp_path.replace(cache_file)
 
     return plum_string
 
@@ -187,6 +216,10 @@ def attempt_to_get_pdf_page_num(pdf_gg_num: int, page_text_lower: str) -> int:
     return int(page_split[5])
 
 
+class UnableToGetActInfo(ValueError):
+    pass
+
+
 @typechecked
 def decode_complex_pdf_type_minor(text: str) -> Act:
     """
@@ -291,11 +324,11 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                             year=1933,
                         )
                     else:
-                        # ic()
-                        logger.debug("No act information found in text:")
-                        logger.debug(s)
-                        logger.debug("----------------------")
-                        raise ValueError(
+                        ic()
+                        print2("----------------------")
+                        print2(s)
+                        print2("----------------------")
+                        raise UnableToGetActInfo(
                             "No act information found in the provided text"
                         )
 
@@ -649,6 +682,7 @@ def looks_like_pdf_with_r_leading_notices(text: str) -> bool:
     return False
 
 
+@typechecked()
 def detect_minor_pdf_type(text: str) -> str:
     # Determine the minor type by searching the full text
     full_text_lower = text.lower()
@@ -665,14 +699,22 @@ def detect_minor_pdf_type(text: str) -> str:
         # - ROAD ACCIDENT FUND ACT 56 OF 1996
         # - SKILLS DEVELOPMENT ACT 97 OF 1998
         # - COMPETITION ACT 89 OF 1998
-        act = decode_complex_pdf_type_minor(text)
-        return f"{act.whom} ACT {act.number} of {act.year}"
+        try:
+            act = decode_complex_pdf_type_minor(text)
+        except UnableToGetActInfo as ex:
+            ic()
+            logger.exception("Error decoding Act-related details.")
+            ic()
+            raise ValueError("No act information found in the provided text") from ex
+        else:
+            return f"{act.whom} ACT {act.number} of {act.year}"
 
 
 @typechecked
 def get_notice_for_gg(
     p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
 ) -> Notice:
+    ic(p)
     # Grab all text from the PDF file:
     text = load_or_scan_pdf_text(p)
 
