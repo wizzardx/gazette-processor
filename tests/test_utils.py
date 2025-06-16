@@ -13,7 +13,6 @@ from src.ongoing_convo_with_bronn_2025_06_10.pdf_parser_multi_notice import (
     parse_gazette_document,
 )
 from src.ongoing_convo_with_bronn_2025_06_10.utils import (
-    GgPdfs,
     attempt_to_get_pdf_page_num,
     decode_complex_pdf_type_minor,
     detect_gg_num,
@@ -56,54 +55,6 @@ class TestParseGgFilename:
         """Test invalid date format returns None"""
         assert parse_gg_filename("gg52724_32May2025.pdf") is None  # Invalid day
         assert parse_gg_filename("gg52724_23Xyz2025.pdf") is None  # Invalid month
-
-
-class TestGgPdfs:
-    """Tests for GgPdfs class"""
-
-    def test_gg_pdfs_initialization(self):
-        """Test GgPdfs initialization"""
-        gg_pdfs = GgPdfs()
-        assert gg_pdfs._path is None
-        assert gg_pdfs._gg_number is None
-        assert gg_pdfs._publish_date is None
-
-    def test_add_valid_path(self):
-        """Test adding a valid path"""
-        gg_pdfs = GgPdfs()
-        with tempfile.NamedTemporaryFile(
-            suffix="_52724_23May2025.pdf", delete=False
-        ) as f:
-            test_path = Path(f.name)
-
-        try:
-            # Rename to have correct format
-            correct_path = test_path.parent / "gg52724_23May2025.pdf"
-            test_path.rename(correct_path)
-
-            gg_pdfs.add_path(correct_path)
-            assert gg_pdfs.path() == correct_path
-        finally:
-            if correct_path.exists():
-                correct_path.unlink()
-
-    def test_add_invalid_path(self):
-        """Test adding invalid path raises assertion"""
-        gg_pdfs = GgPdfs()
-        with tempfile.NamedTemporaryFile(suffix="_invalid.pdf", delete=False) as f:
-            test_path = Path(f.name)
-
-        try:
-            with pytest.raises(AssertionError):
-                gg_pdfs.add_path(test_path)
-        finally:
-            test_path.unlink()
-
-    def test_path_before_setting(self):
-        """Test accessing path before setting raises assertion"""
-        gg_pdfs = GgPdfs()
-        with pytest.raises(AssertionError):
-            gg_pdfs.path()
 
 
 class TestLooksLikeFunctions:

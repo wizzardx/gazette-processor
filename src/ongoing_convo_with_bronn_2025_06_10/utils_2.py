@@ -11,17 +11,18 @@ from .common_types import Notice
 from .prints import print1, print2
 from .utils import get_notice_for_gg_num, load_or_scan_pdf_text
 
-GG_DIR = Path(
-    "/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/"
-)
+#
+# GG_DIR = Path(
+#     "/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/"
+# )
 
 
-def output_testing_bulletin_2() -> None:
+def output_testing_bulletin_2(gg_dir: Path) -> None:
     cached_llm = CachedLLM()
 
     # Get all the filename paths in advance so that we can show progress progressing through all of them.
     paths = []
-    for p in GG_DIR.iterdir():
+    for p in gg_dir.iterdir():
         # if p.is_file() and p.name.startswith("gg") and p.name.endswith(".pdf"):
         if p.is_file() and p.name.endswith(".pdf"):
             print2(f"Found GG PDF: {p.name}")
@@ -31,7 +32,7 @@ def output_testing_bulletin_2() -> None:
     for p in tqdm(sorted(paths)):
         # Here you would call your function to process the PDF
         # For example:
-        for notice in find_notices_in_pdf(p=p, cached_llm=cached_llm):
+        for notice in find_notices_in_pdf(p=p, cached_llm=cached_llm, gg_dir=gg_dir):
             print2(notice.text)
 
 
@@ -61,7 +62,9 @@ def search_for_prospective_gg_nums(text: str) -> Iterator[int]:
 
 
 @typechecked
-def find_notices_in_pdf(p: Path, cached_llm: CachedLLM) -> Iterator[Notice]:
+def find_notices_in_pdf(
+    p: Path, cached_llm: CachedLLM, gg_dir: Path
+) -> Iterator[Notice]:
     # We have the notice filename (containining the notice number), and the
     # cached LLM. Next, we can try to brute force all of our methods across
     # the PDF file
@@ -83,6 +86,7 @@ def find_notices_in_pdf(p: Path, cached_llm: CachedLLM) -> Iterator[Notice]:
                 gg_number=gazette_number,
                 notice_number=notice_number,
                 cached_llm=cached_llm,
+                gg_dir=gg_dir,
             )
         except Exception as ex:
             # We expect most of these to be errors

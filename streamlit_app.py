@@ -10,6 +10,7 @@ import threading
 import time
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import quote
 
 import pandas as pd
@@ -805,7 +806,7 @@ def generate_bulletin_page():
 
                     bulletin_buffer = io.StringIO()
                     with redirect_stdout(bulletin_buffer):
-                        output_testing_bulletin()
+                        output_testing_bulletin(gg_dir=Path("./streamlit_app_data/pdf_files/"))
 
                     bulletin_content = bulletin_buffer.getvalue()
 

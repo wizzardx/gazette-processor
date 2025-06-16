@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pdfplumber
+from pydantic import BaseModel
 from typeguard import typechecked
 
 # Add the project root to the path
@@ -28,9 +29,8 @@ logger = logging.getLogger(__name__)
 
 from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
-from .pdf_parser_multi_leading_r_notice import (
-    get_notice_leading_r_from_multi_notice_pdf,
-)
+from .pdf_parser_multi_leading_r_notice import \
+    get_notice_leading_r_from_multi_notice_pdf
 from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
 from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
@@ -85,9 +85,9 @@ def load_or_scan_pdf_text(p: Path) -> str:
     return plum_string
 
 
-GG_DIR = Path(
-    "/home/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/"
-)
+# GG_DIR_X = Path(
+#     "/hom, gg_dir: Pathe/david/dev/misc/bronnwyn-stuff/bulletin-generator-rnd/files_from_bronnwyn/2025-05-28/David Bulletin/Source GGs/2025/"
+# )
 
 #
 # class MultipleMatchesFound(ValueError):
@@ -130,59 +130,28 @@ def parse_gg_filename(filename: str) -> Optional[dict[str, Any]]:
 
 
 @typechecked
-class GgPdfs:
-    def __init__(self) -> None:
-        self._path: Optional[Path] = None
-        self._gg_number: Optional[int] = None
-        self._publish_date: Optional[datetime] = None
-
-    def path(self) -> Path:
-        assert self._path is not None
-        return self._path
-
-    def add_path(self, p: Path) -> None:
-        # ic(p)
-        parsed = parse_gg_filename(p.name)
-        if parsed is not None:
-            assert self._path is None
-            self._path = p
-            self._gg_number = parsed["gg_number"]
-            self._publish_date = parsed["publish_date"]
-        else:
-            # Unable to parse the filename?
-            assert 0, repr(p.name)
-
-    # assert 0
-    # if result is not None:
-    #     assert 0
-    #     raise MultipleMatchesFound(f"Found multiple files containing gg number {gg_number}")
-    # result = p
-    # assertj 0
-    #
-
-
-@typechecked
-def locate_gg_pdf_by_number(gg_number: int) -> GgPdfs:
-    result = GgPdfs()
+def locate_gg_pdf_by_number(gg_number: int, gg_dir: Path) -> Path:
+    result = None
     gg_s = str(gg_number)
-    for p in GG_DIR.iterdir():
+    for p in gg_dir.iterdir():
         if gg_s in p.name:
-            result.add_path(p)
-    return result
+            return p
+    raise ValueError(
+        f"Could not find a PDF file with GG Number {gg_number} in directory {gg_dir}"
+    )
 
 
 @typechecked
 def get_notice_for_gg_num(
-    gg_number: int, notice_number: int, cached_llm: "CachedLLM"
+    gg_number: int, notice_number: int, cached_llm: "CachedLLM", gg_dir: Path
 ) -> Notice:
-    pdf_info = locate_gg_pdf_by_number(gg_number)
-    p = pdf_info.path()
+    p = locate_gg_pdf_by_number(gg_number, gg_dir=gg_dir)
     return get_notice_for_gg(
         p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
     )
 
 
-def output_testing_bulletin() -> None:
+def output_testing_bulletin(gg_dir: Path) -> None:
     cached_llm = CachedLLM()
 
     f = open("notices.csv")
@@ -195,6 +164,7 @@ def output_testing_bulletin() -> None:
         gg_number=int(row["gazette_number"]),
         notice_number=int(row["notice_number"]),
         cached_llm=cached_llm,
+        gg_dir=gg_dir,
     )
 
     if notice is None:
@@ -297,10 +267,13 @@ def output_testing_bulletin() -> None:
 
     @typechecked
     def print_notice_info(
-        gg_number: int, notice_number: int, cached_llm: CachedLLM
+        gg_number: int, notice_number: int, cached_llm: CachedLLM, gg_dir: Path
     ) -> tuple[str, str]:
         notice = get_notice_for_gg_num(
-            gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
+            gg_number=gg_number,
+            notice_number=notice_number,
+            cached_llm=cached_llm,
+            gg_dir=gg_dir,
         )
         notice_type_major_abbr = get_notice_type_abbr(notice.type_major)
         # print("Department of Tourism:")
@@ -330,7 +303,10 @@ def output_testing_bulletin() -> None:
 
     def print_notice(notice_number: int, gg_number: int) -> tuple[str, str]:
         return print_notice_info(
-            notice_number=notice_number, gg_number=gg_number, cached_llm=cached_llm
+            notice_number=notice_number,
+            gg_number=gg_number,
+            cached_llm=cached_llm,
+            gg_dir=gg_dir,
         )
 
     #

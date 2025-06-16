@@ -197,7 +197,10 @@ class TestGetNoticeForGGNum:
             "Draft National Policy on Heritage Memorialisation"
         )
         notice = get_notice_for_gg_num(
-            gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+            gg_number=52724,
+            notice_number=3228,
+            cached_llm=mock_cached_llm,
+            gg_dir=Path("/test/dir"),
         )
 
         # Verify record fields
@@ -230,7 +233,10 @@ class TestGetNoticeForGGNum:
             mock_cached_llm = MagicMock()
             mock_cached_llm.summarize.return_value = "Invalid text"
             get_notice_for_gg_num(
-                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+                gg_number=52724,
+                notice_number=3228,
+                cached_llm=mock_cached_llm,
+                gg_dir=Path("/test/dir"),
             )
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
@@ -247,7 +253,10 @@ class TestGetNoticeForGGNum:
             mock_cached_llm = MagicMock()
             mock_cached_llm.summarize.return_value = "Unknown type text"
             get_notice_for_gg_num(
-                gg_number=52724, notice_number=9999, cached_llm=mock_cached_llm
+                gg_number=52724,
+                notice_number=9999,
+                cached_llm=mock_cached_llm,
+                gg_dir=Path("/test/dir"),
             )
 
     @patch("src.ongoing_convo_with_bronn_2025_06_10.utils.locate_gg_pdf_by_number")
@@ -264,7 +273,10 @@ class TestGetNoticeForGGNum:
             mock_cached_llm = MagicMock()
             mock_cached_llm.summarize.return_value = "Unknown department text"
             get_notice_for_gg_num(
-                gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+                gg_number=52724,
+                notice_number=3228,
+                cached_llm=mock_cached_llm,
+                gg_dir=Path("/test/dir"),
             )
 
 
@@ -286,7 +298,10 @@ class TestIntegration:
             "Draft National Policy on Heritage Memorialisation: Publication of notice"
         )
         record = get_notice_for_gg_num(
-            gg_number=52724, notice_number=3228, cached_llm=mock_cached_llm
+            gg_number=52724,
+            notice_number=3228,
+            cached_llm=mock_cached_llm,
+            gg_dir=Path("/test/dir"),
         )
 
         # Verify the record is correct
