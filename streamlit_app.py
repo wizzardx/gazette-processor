@@ -80,8 +80,18 @@ def start_file_server():
     if FILE_SERVER_PORT is not None:
         return FILE_SERVER_PORT
 
-    # Find a free port
-    FILE_SERVER_PORT = find_free_port()
+    # Check for PDF_SERVER_PORT environment variable
+    server_port_env = os.environ.get("PDF_SERVER_PORT")
+    if server_port_env:
+        try:
+            FILE_SERVER_PORT = int(server_port_env)
+        except ValueError:
+            raise RuntimeError(
+                f"PDF_SERVER_PORT environment variable must be a valid integer, got: {server_port_env}"
+            )
+    else:
+        # Find a free port if PDF_SERVER_PORT is not specified
+        FILE_SERVER_PORT = find_free_port()
 
     # Create the PDF directory if it doesn't exist
     pdf_dir = "streamlit_app_data/pdf_files"
@@ -515,8 +525,9 @@ def annotate_pdf_page():
 
     # Show file server info
     if FILE_SERVER_PORT:
+        server_host = os.environ.get("PDF_SERVER_HOST", "localhost")
         st.info(
-            f"🔗 PDF file server running on localhost:{FILE_SERVER_PORT} - Click any filename below to view the PDF!"
+            f"🔗 PDF file server running on {server_host}:{FILE_SERVER_PORT} - Click any filename below to view the PDF!"
         )
 
     # Start the file server
