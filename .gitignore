@@ -23,3 +23,6 @@ repomix-output.xml
 .llm_cache.json
 output/
 *.log
+
+# More:
+streamlit_app_data/

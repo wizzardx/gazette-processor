@@ -223,6 +223,7 @@ def output_testing_bulletin() -> None:
         return {
             MajorType.GENERAL_NOTICE: "PROCLAMATIONS AND NOTICES",
             MajorType.BOARD_NOTICE: "BOARD NOTICE",
+            MajorType.GOVERNMENT_NOTICE: "GOVERNMENT NOTICE",
         }[t]
 
         # Note: List of all of the abbreviations can be found in the footer of the docs

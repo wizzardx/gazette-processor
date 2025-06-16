@@ -52,6 +52,12 @@ pandoc -o output/output.docx output/output.md \
 #   --metadata author="[Automatically Generated]" \
 #   --metadata date="$(date +%Y-%m-%d)"
 
+# Web UI:
+
+# rye run streamlit run streamlit_app.py
+
 echo
 echo -e "\e[32mTests completed succesfully.\e[0m"
 echo
+
+
