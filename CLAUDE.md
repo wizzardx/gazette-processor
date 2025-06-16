@@ -27,8 +27,15 @@ rye fmt  # Rye's built-in formatter
 
 ### Running the Application
 ```bash
-rye run python bb_logic.py  # Process notices from notices.csv
-rye run python bb_logic.py > output/output.md  # Generate markdown output
+# CLI Commands (using Click)
+rye run python bb_logic.py bulletin      # Generate bulletin from notices.csv
+rye run python bb_logic.py bulletin2     # Generate bulletin using all available PDFs
+
+# Generate output files
+rye run python bb_logic.py bulletin > output/output.md  # Generate markdown output
+
+# Web Interface
+rye run streamlit run streamlit_app.py   # Launch Streamlit web UI for PDF annotation
 ```
 
 ### Package Management
@@ -42,11 +49,14 @@ rye run <command>  # Run commands in virtual environment
 
 ### Core Components
 
-**bb_logic.py**: Main application orchestrator that processes notices from CSV input and generates bulletin output
+**bb_logic.py**: Main CLI application using Click framework with commands for bulletin generation
+
+**streamlit_app.py**: Web interface for PDF annotation and processing with password protection
 
 **src/ongoing_convo_with_bronn_2025_06_10/**:
 - `cached_llm.py`: Claude API wrapper with MD5-based caching system
 - `utils.py`: PDF processing utilities with multi-strategy parsing
+- `utils_2.py`: Extended utilities for processing all available PDFs
 - `common_types.py`: Pydantic models for Notice, MajorType enum, and Act
 - `pdf_parser_*.py`: Three different PDF parsing strategies for various notice formats
 - `validation_helpers.py`: Pydantic configuration utilities
@@ -87,6 +97,14 @@ The system generates:
 - Markdown bulletin format (stdout/output.md)
 - PDF via pandoc with XeLaTeX engine
 - DOCX with table of contents and metadata
+
+### Document Generation Pipeline
+The `./utils/test.sh` script runs the complete pipeline:
+1. Code formatting and linting
+2. Type checking with mypy
+3. Test execution with coverage
+4. Bulletin generation
+5. PDF and DOCX conversion using pandoc
 
 ## Notice Types
 

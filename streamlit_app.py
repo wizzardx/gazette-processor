@@ -68,6 +68,14 @@ def start_file_server():
     """Start a background HTTP server for serving PDF files"""
     global FILE_SERVER_PORT
 
+    # Check for required environment variable
+    server_host = os.environ.get("PDF_SERVER_HOST")
+    if not server_host:
+        raise RuntimeError(
+            "PDF_SERVER_HOST environment variable is required. "
+            "Set it to the hostname where the PDF server should be hosted (e.g., 'localhost', 'example.com', or '0.0.0.0')"
+        )
+
     # Only start if not already running
     if FILE_SERVER_PORT is not None:
         return FILE_SERVER_PORT
@@ -81,7 +89,7 @@ def start_file_server():
 
     def run_server():
         try:
-            server = HTTPServer(("localhost", FILE_SERVER_PORT), PDFFileHandler)
+            server = HTTPServer((server_host, FILE_SERVER_PORT), PDFFileHandler)
             server.serve_forever()
         except Exception as e:
             print(f"File server error: {e}")
@@ -103,9 +111,12 @@ def get_pdf_url(filename):
     if FILE_SERVER_PORT is None:
         FILE_SERVER_PORT = start_file_server()
 
+    # Get the server host from environment variable
+    server_host = os.environ.get("PDF_SERVER_HOST", "localhost")
+
     # URL encode the filename to handle special characters
     encoded_filename = quote(filename)
-    return f"http://localhost:{FILE_SERVER_PORT}/{encoded_filename}"
+    return f"http://{server_host}:{FILE_SERVER_PORT}/{encoded_filename}"
 
 
 def hash_password(password):
