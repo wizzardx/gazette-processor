@@ -21,9 +21,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from ongoing_convo_with_bronn_2025_06_10.cached_llm import CachedLLM
 from ongoing_convo_with_bronn_2025_06_10.common_types import Notice
-from ongoing_convo_with_bronn_2025_06_10.utils import (get_notice_for_gg_num,
-                                                       output_testing_bulletin,
-                                                       parse_gg_filename)
+from ongoing_convo_with_bronn_2025_06_10.utils import (
+    get_notice_for_gg_num,
+    output_testing_bulletin,
+    parse_gg_filename,
+)
 
 # SHA256 Hash of the password for users to use this applet.
 TARGET_HASH = "332ae4926cbb3e66ecb24b356318eacac8470cf8fba264fafa3238c710dc87dd"
@@ -260,9 +262,7 @@ def home_page():
                 "I understand that this action cannot be undone"
             )
 
-            if st.form_submit_button(
-                "🗑️ Clear All Data", type="secondary"
-            ):
+            if st.form_submit_button("🗑️ Clear All Data", type="secondary"):
                 if confirm_clear:
                     with st.spinner("Clearing all data..."):
                         try:

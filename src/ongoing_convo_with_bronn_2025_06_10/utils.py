@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 
 from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
-from .pdf_parser_multi_leading_r_notice import \
-    get_notice_leading_r_from_multi_notice_pdf
+from .pdf_parser_multi_leading_r_notice import (
+    get_notice_leading_r_from_multi_notice_pdf,
+)
 from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
 from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
