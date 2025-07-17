@@ -21,11 +21,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from ongoing_convo_with_bronn_2025_06_10.cached_llm import CachedLLM
 from ongoing_convo_with_bronn_2025_06_10.common_types import Notice
-from ongoing_convo_with_bronn_2025_06_10.utils import (
-    get_notice_for_gg_num,
-    output_testing_bulletin,
-    parse_gg_filename,
-)
+from ongoing_convo_with_bronn_2025_06_10.utils import (get_notice_for_gg_num,
+                                                       output_testing_bulletin,
+                                                       parse_gg_filename)
 
 # SHA256 Hash of the password for users to use this applet.
 TARGET_HASH = "332ae4926cbb3e66ecb24b356318eacac8470cf8fba264fafa3238c710dc87dd"
@@ -217,6 +215,92 @@ def home_page():
     if st.button("Generate Bulletin", type="primary"):
         st.session_state["current_page"] = "📰 Generate Bulletin"
         st.rerun()
+
+    st.markdown("---")
+    st.write("### 🗑️ Clear All Data")
+    st.write("Remove all uploaded bulletins, annotations, and cached data.")
+
+    # Check if there's data to clear
+    storage_dir = "streamlit_app_data/pdf_files"
+    annotations_dir = "streamlit_app_data/annotations"
+    cache_dir = "cache"
+
+    has_data = False
+    data_summary = []
+
+    if os.path.exists(storage_dir):
+        pdf_count = len([f for f in os.listdir(storage_dir) if f.endswith(".pdf")])
+        if pdf_count > 0:
+            has_data = True
+            data_summary.append(f"{pdf_count} PDF files")
+
+    if os.path.exists(annotations_dir):
+        annotation_count = len(
+            [f for f in os.listdir(annotations_dir) if f.endswith(".json")]
+        )
+        if annotation_count > 0:
+            has_data = True
+            data_summary.append(f"{annotation_count} annotations")
+
+    if os.path.exists(cache_dir):
+        cache_count = len([f for f in os.listdir(cache_dir) if f.endswith(".txt")])
+        if cache_count > 0:
+            has_data = True
+            data_summary.append(f"{cache_count} cache files")
+
+    if has_data:
+        st.info(f"Data to clear: {', '.join(data_summary)}")
+
+        # Use a form for confirmation
+        with st.form("clear_all_form"):
+            st.warning(
+                "⚠️ **Warning**: This action cannot be undone. All uploaded PDFs, annotations, and cached data will be permanently deleted."
+            )
+            confirm_clear = st.checkbox(
+                "I understand that this action cannot be undone"
+            )
+
+            if st.form_submit_button(
+                "🗑️ Clear All Data", type="secondary", disabled=not confirm_clear
+            ):
+                if confirm_clear:
+                    with st.spinner("Clearing all data..."):
+                        try:
+                            cleared_items = clear_all_data()
+                            st.success(
+                                f"✅ Successfully cleared {len(cleared_items)} items!"
+                            )
+
+                            # Show what was cleared
+                            with st.expander("📄 Cleared Items"):
+                                for item in cleared_items:
+                                    st.write(f"• {item}")
+
+                            # Clear session state
+                            keys_to_remove = [
+                                key
+                                for key in st.session_state.keys()
+                                if key.startswith(
+                                    (
+                                        "annotation_",
+                                        "gg_annotations_",
+                                        "uploaded_pdfs",
+                                        "saved_pdf_info",
+                                    )
+                                )
+                            ]
+                            for key in keys_to_remove:
+                                st.session_state.pop(key, None)
+
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error clearing data: {str(e)}")
+                else:
+                    st.error(
+                        "Please confirm that you understand this action cannot be undone."
+                    )
+    else:
+        st.info("No data to clear. Upload some PDFs first!")
 
     st.markdown("---")
     st.write("### Quick Stats")
@@ -654,6 +738,114 @@ def annotate_pdf_page():
     if changes_made:
         st.success("🎉 All changes have been automatically saved!")
 
+    # Add clear data section at the bottom
+    st.markdown("---")
+    st.subheader("🗑️ Clear Data")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("**Clear Annotations Only**")
+        if st.button("🗑️ Clear All Annotations", type="secondary"):
+            with st.spinner("Clearing annotations..."):
+                try:
+                    cleared_count = 0
+                    if os.path.exists(annotations_dir):
+                        annotation_files = [
+                            f
+                            for f in os.listdir(annotations_dir)
+                            if f.endswith(".json")
+                        ]
+                        for annotation_file in annotation_files:
+                            os.remove(os.path.join(annotations_dir, annotation_file))
+                            cleared_count += 1
+
+                    st.success(f"✅ Cleared {cleared_count} annotation files!")
+
+                    # Clear session state
+                    keys_to_remove = [
+                        key
+                        for key in st.session_state.keys()
+                        if key.startswith(("annotation_", "gg_annotations_"))
+                    ]
+                    for key in keys_to_remove:
+                        st.session_state.pop(key, None)
+
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error clearing annotations: {str(e)}")
+
+    with col2:
+        st.write("**Clear Everything**")
+        if st.button("🗑️ Clear All Data", type="secondary"):
+            with st.spinner("Clearing all data..."):
+                try:
+                    cleared_items = clear_all_data()
+                    st.success(f"✅ Successfully cleared {len(cleared_items)} items!")
+
+                    # Clear session state
+                    keys_to_remove = [
+                        key
+                        for key in st.session_state.keys()
+                        if key.startswith(
+                            (
+                                "annotation_",
+                                "gg_annotations_",
+                                "uploaded_pdfs",
+                                "saved_pdf_info",
+                            )
+                        )
+                    ]
+                    for key in keys_to_remove:
+                        st.session_state.pop(key, None)
+
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error clearing data: {str(e)}")
+
+
+def clear_all_data():
+    """Clear all uploaded bulletins and metadata"""
+    import shutil
+
+    # Directories to clear
+    storage_dir = "streamlit_app_data/pdf_files"
+    annotations_dir = "streamlit_app_data/annotations"
+    cache_dir = "cache"
+
+    cleared_items = []
+
+    # Clear PDF files
+    if os.path.exists(storage_dir):
+        pdf_files = [f for f in os.listdir(storage_dir) if f.endswith(".pdf")]
+        for pdf_file in pdf_files:
+            os.remove(os.path.join(storage_dir, pdf_file))
+            cleared_items.append(f"PDF: {pdf_file}")
+
+    # Clear annotations
+    if os.path.exists(annotations_dir):
+        annotation_files = [
+            f for f in os.listdir(annotations_dir) if f.endswith(".json")
+        ]
+        for annotation_file in annotation_files:
+            os.remove(os.path.join(annotations_dir, annotation_file))
+            cleared_items.append(f"Annotation: {annotation_file}")
+
+    # Clear cache files
+    if os.path.exists(cache_dir):
+        cache_files = [f for f in os.listdir(cache_dir) if f.endswith(".txt")]
+        for cache_file in cache_files:
+            os.remove(os.path.join(cache_dir, cache_file))
+            cleared_items.append(f"Cache: {cache_file}")
+
+        # Clear LLM cache JSON file
+        llm_cache_file = os.path.join(cache_dir, "llm_cache.json")
+        if os.path.exists(llm_cache_file):
+            os.remove(llm_cache_file)
+            cleared_items.append("LLM Cache: llm_cache.json")
+
+    return cleared_items
+
 
 def generate_bulletin_page():
     """Page for generating bulletin from annotated PDFs"""
@@ -806,7 +998,9 @@ def generate_bulletin_page():
 
                     bulletin_buffer = io.StringIO()
                     with redirect_stdout(bulletin_buffer):
-                        output_testing_bulletin(gg_dir=Path("./streamlit_app_data/pdf_files/"))
+                        output_testing_bulletin(
+                            gg_dir=Path("./streamlit_app_data/pdf_files/")
+                        )
 
                     bulletin_content = bulletin_buffer.getvalue()
 
