@@ -261,7 +261,7 @@ def home_page():
             )
 
             if st.form_submit_button(
-                "🗑️ Clear All Data", type="secondary", disabled=not confirm_clear
+                "🗑️ Clear All Data", type="secondary"
             ):
                 if confirm_clear:
                     with st.spinner("Clearing all data..."):
