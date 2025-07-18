@@ -1,10 +1,14 @@
 import os
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.ongoing_convo_with_bronn_2025_06_10.common_types import Act, MajorType, Notice
 from src.ongoing_convo_with_bronn_2025_06_10.pdf_parser_multi_notice import (
@@ -257,7 +261,7 @@ class TestDecodeComplexPdfTypeMinor:
     def test_standard_format(self):
         """Test standard act format parsing"""
         text = "Road Accident Fund Act (56/1996)"
-        result = decode_complex_pdf_type_minor(text)
+        result = decode_complex_pdf_type_minor(text, ["page1"])
         assert result.whom == "Road Accident Fund"
         assert result.number == 56
         assert result.year == 1996
@@ -265,7 +269,7 @@ class TestDecodeComplexPdfTypeMinor:
     def test_semicolon_format(self):
         """Test semicolon format parsing"""
         text = "Currency and Exchanges-Act; 1933 (Act No: 9 of 1933)"
-        result = decode_complex_pdf_type_minor(text)
+        result = decode_complex_pdf_type_minor(text, ["page1"])
         assert result.whom == "Currency and Exchanges"
         assert result.number == 9
         assert result.year == 1933
@@ -273,7 +277,7 @@ class TestDecodeComplexPdfTypeMinor:
     def test_no_format(self):
         """Test format without parentheses"""
         text = "Skills Development Act, No. 97 of 1998"
-        result = decode_complex_pdf_type_minor(text)
+        result = decode_complex_pdf_type_minor(text, ["page1"])
         assert result.whom == "Skills Development"
         assert result.number == 97
         assert result.year == 1998
@@ -281,7 +285,7 @@ class TestDecodeComplexPdfTypeMinor:
     def test_old_format(self):
         """Test old format"""
         text = "COMPETITION ACT, 1998 (ACT NO: 89 OF 1998)"
-        result = decode_complex_pdf_type_minor(text)
+        result = decode_complex_pdf_type_minor(text, ["page1"])
         assert result.whom == "COMPETITION"
         assert result.number == 89
         assert result.year == 1998
@@ -289,7 +293,7 @@ class TestDecodeComplexPdfTypeMinor:
     def test_special_case(self):
         """Test special case for Currency and Exchanges"""
         text = "with limited authority for the purpose of Exchange Control Regulations"
-        result = decode_complex_pdf_type_minor(text)
+        result = decode_complex_pdf_type_minor(text, ["page1"])
         assert result.whom == "Currency and Exchanges"
         assert result.number == 9
         assert result.year == 1933
@@ -298,7 +302,7 @@ class TestDecodeComplexPdfTypeMinor:
         """Test when no pattern matches"""
         text = "Some random text without act information"
         with pytest.raises(ValueError, match="No act information found"):
-            decode_complex_pdf_type_minor(text)
+            decode_complex_pdf_type_minor(text, ["page1"])
 
 
 class TestDetectMinorPdfType:
@@ -307,25 +311,25 @@ class TestDetectMinorPdfType:
     def test_sports_department(self):
         """Test sports department detection"""
         text = "Department of Sports, Arts and Culture notice"
-        result = detect_minor_pdf_type(text)
+        result = detect_minor_pdf_type(text, ["page1"])
         assert result == "Department of Sports, Arts and Culture"
 
     def test_tourism_department(self):
         """Test tourism department detection"""
         text = "National Astro-Tourism initiative"
-        result = detect_minor_pdf_type(text)
+        result = detect_minor_pdf_type(text, ["page1"])
         assert result == "Department of Tourism"
 
     def test_transport_department(self):
         """Test transport department detection"""
         text = "Department of Transport regulations"
-        result = detect_minor_pdf_type(text)
+        result = detect_minor_pdf_type(text, ["page1"])
         assert result == "Department of Transport"
 
     def test_currency_exchange(self):
         """Test currency exchange detection"""
         text = "Authority for the purpose of Exchange Control"
-        result = detect_minor_pdf_type(text)
+        result = detect_minor_pdf_type(text, ["page1"])
         assert result == "CURRENCY AND EXCHANGES ACT 9 OF 1933"
 
     @patch(
@@ -340,7 +344,7 @@ class TestDetectMinorPdfType:
         mock_decode.return_value = mock_act
 
         text = "Some other act text"
-        result = detect_minor_pdf_type(text)
+        result = detect_minor_pdf_type(text, ["page1"])
         assert result == "Test Act ACT 123 of 2020"
 
 
@@ -447,7 +451,10 @@ class TestLoadOrScanPdfText:
             patch("pathlib.Path.replace"),
         ):
             result = load_or_scan_pdf_text(Path("test.pdf"))
-            assert result == "Page 1 text\nPage 2 text"
+            assert result == (
+                "Page 1 text\nPage 2 text",
+                ["Page 1 text", "Page 2 text"],
+            )
 
     @patch("pdfplumber.open")
     def test_empty_pdf(self, mock_pdfplumber):
@@ -485,7 +492,7 @@ class TestLoadOrScanPdfText:
             patch("pathlib.Path.replace"),
         ):
             result = load_or_scan_pdf_text(Path("test.pdf"))
-            assert result == "[No plumber text extracted]"
+            assert result == ("[No plumber text extracted]", [])
 
     @patch("pdfplumber.open")
     def test_more_than_five_pages(self, mock_pdfplumber):
@@ -529,8 +536,9 @@ class TestLoadOrScanPdfText:
         ):
             result = load_or_scan_pdf_text(Path("test.pdf"))
             # Should only have first 5 pages
-            expected = "\n".join([f"Page {i + 1} text" for i in range(5)])
-            assert result == expected
+            expected_text = "\n".join([f"Page {i + 1} text" for i in range(5)])
+            expected_pages = [f"Page {i + 1} text" for i in range(5)]
+            assert result == (expected_text, expected_pages)
 
 
 class TestGetNoticeForGg:
@@ -543,10 +551,13 @@ class TestGetNoticeForGg:
     def test_short_pdf_processing(self, mock_looks_like, mock_load_text):
         """Test processing a short PDF (not a long list)"""
         mock_looks_like.return_value = False
-        mock_load_text.return_value = """Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May
+        mock_load_text.return_value = (
+            """Government Gazette Staaiskoerant REPUBLIEKVANSUIDAFRIKA Vol: 719 23 2025 No: 52724 Mei ISSN 1682-5845 May
 Some content here
 Department of Sports, Arts and Culture notice
-No. 52724 3"""
+No. 52724 3""",
+            ["Page 1", "Page 2"],
+        )
 
         mock_cached_llm = MagicMock()
         mock_cached_llm.summarize.return_value = "Test summary"
@@ -574,7 +585,7 @@ No. 52724 3"""
     ):
         """Test processing a long PDF (with long list)"""
         mock_looks_like.return_value = True
-        mock_load_text.return_value = "Long PDF text"
+        mock_load_text.return_value = ("Long PDF text", ["Page 1"])
 
         mock_notice = MagicMock()
         mock_get_notice_long.return_value = mock_notice

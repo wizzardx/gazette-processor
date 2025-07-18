@@ -40,7 +40,8 @@ from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
 
 @typechecked
-def load_or_scan_pdf_text(p: Path) -> str:
+def load_or_scan_pdf_text(p: Path) -> tuple[str, list[str]]:
+    # TODO: Rename function name "or scan" to "or ocr"
     # Create cache directory if it doesn't exist
     cache_dir = Path("cache")
     cache_dir.mkdir(exist_ok=True)
@@ -50,12 +51,14 @@ def load_or_scan_pdf_text(p: Path) -> str:
         file_hash = hashlib.md5(f.read()).hexdigest()
 
     # Create cache file path based on hash
-    cache_file = cache_dir / f"{file_hash}.txt"
+    # TODO: Refactor Cache -related logic in other places, too.
+    cache_file = cache_dir / f"{file_hash}.json"
 
     # Check if cached result exists
     if cache_file.exists():
         with open(cache_file, "r", encoding="utf-8") as f:
-            return f.read()
+            cached_data = json.load(f)
+            return cached_data["text"], cached_data["pages"]
 
     # Extract text using pdfplumber (first 5 pages by default)
     plum_text_pages = []
@@ -74,16 +77,17 @@ def load_or_scan_pdf_text(p: Path) -> str:
         plum_string = "[No plumber text extracted]"  # Placeholder for empty content
 
     # Save to cache using a temporary file for atomic writes
+    cache_data = {"text": plum_string, "pages": plum_text_pages}
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=cache_dir, delete=False
     ) as tmp_file:
-        tmp_file.write(plum_string)
+        json.dump(cache_data, tmp_file)
         tmp_path = Path(tmp_file.name)
 
     # Atomically move the temporary file to the final location
     tmp_path.replace(cache_file)
 
-    return plum_string
+    return plum_string, plum_text_pages
 
 
 # GG_DIR_X = Path(
@@ -144,11 +148,17 @@ def locate_gg_pdf_by_number(gg_number: int, gg_dir: Path) -> Path:
 
 @typechecked
 def get_notice_for_gg_num(
-    gg_number: int, notice_number: int, cached_llm: "CachedLLM", gg_dir: Path
+    gg_number: int,
+    notice_number: int,
+    cached_llm: "CachedLLM",
+    gg_dir: Path,
 ) -> Notice:
     p = locate_gg_pdf_by_number(gg_number, gg_dir=gg_dir)
     return get_notice_for_gg(
-        p=p, gg_number=gg_number, notice_number=notice_number, cached_llm=cached_llm
+        p=p,
+        gg_number=gg_number,
+        notice_number=notice_number,
+        cached_llm=cached_llm,
     )
 
 
@@ -498,7 +508,7 @@ class UnableToGetActInfo(ValueError):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(text: str) -> Act:
+def decode_complex_pdf_type_minor(text: str, pages: list[str]) -> Act:
     """
     Extract act information from legal text.
 
@@ -614,13 +624,34 @@ def decode_complex_pdf_type_minor(text: str) -> Act:
                                 year=1933,
                             )
                         else:
-                            ic()
-                            print2("----------------------")
-                            print2(s)
-                            print2("----------------------")
-                            raise UnableToGetActInfo(
-                                "No act information found in the provided text"
-                            )
+                            if len(pages) >= 2:
+                                # We can hit an edge-case here where the second
+                                # page contains the Act info we want.
+                                page2 = pages[1]
+                                if (
+                                    "Mineral Resources and Energy".lower()
+                                    in page2.lower()
+                                ):
+                                    return Act(
+                                        whom="Department of Mineral Resources and Energy",
+                                        number=None,
+                                        year=None,
+                                    )
+                                else:
+                                    print2("----------------------")
+                                    print2(pages[1])
+                                    print2("----------------------")
+                                    raise UnableToGetActInfo(
+                                        "No act information found in the provided text"
+                                    )
+
+                            else:
+                                print2("----------------------")
+                                print2(s)
+                                print2("----------------------")
+                                raise UnableToGetActInfo(
+                                    "No act information found in the provided text"
+                                )
 
 
 ##########
@@ -976,7 +1007,7 @@ def looks_like_pdf_with_r_leading_notices(text: str) -> bool:
 
 
 @typechecked()
-def detect_minor_pdf_type(text: str) -> str:
+def detect_minor_pdf_type(text: str, pages: list[str]) -> str:
     # Determine the minor type by searching the full text
     full_text_lower = text.lower()
     if "department of sports, arts and culture" in full_text_lower:
@@ -999,7 +1030,7 @@ def detect_minor_pdf_type(text: str) -> str:
         # - SKILLS DEVELOPMENT ACT 97 OF 1998
         # - COMPETITION ACT 89 OF 1998
         try:
-            act = decode_complex_pdf_type_minor(text)
+            act = decode_complex_pdf_type_minor(text, pages=pages)
         except UnableToGetActInfo as ex:
             ic()
             logger.exception("Error decoding Act-related details.")
@@ -1014,7 +1045,7 @@ def get_notice_for_gg(
     p: Path, gg_number: int, notice_number: int, cached_llm: CachedLLM
 ) -> Notice:
     # Grab all text from the PDF file:
-    text = load_or_scan_pdf_text(p)
+    text, pages = load_or_scan_pdf_text(p)
 
     # Does this look like a PDF that has a long list of notices in it?
     if looks_like_pdf_with_long_list_of_notices(text):
@@ -1023,6 +1054,7 @@ def get_notice_for_gg(
             gg_number=gg_number,
             notice_number=notice_number,
             cached_llm=cached_llm,
+            pages=pages,
         )
 
     elif looks_like_pdf_with_r_leading_notices(text):
@@ -1032,6 +1064,7 @@ def get_notice_for_gg(
             gg_number=gg_number,
             notice_number=notice_number,
             cached_llm=cached_llm,
+            pages=pages,
         )
 
     else:
@@ -1041,4 +1074,5 @@ def get_notice_for_gg(
             gg_number=gg_number,
             notice_number=notice_number,
             cached_llm=cached_llm,
+            pages=pages,
         )

@@ -77,7 +77,7 @@ def find_notices_in_pdf(
     # together as "lookup" pairs across all of the lookup methoids.
 
     # Use plumbum to convert to text:
-    text = load_or_scan_pdf_text(p)
+    text, pages = load_or_scan_pdf_text(p)
 
     # Now find all the 3 and 4-digit integers within the text:
     for notice_number in search_for_prospective_gg_nums(text):

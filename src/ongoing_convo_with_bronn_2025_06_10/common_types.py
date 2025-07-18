@@ -26,5 +26,5 @@ class MajorType(Enum):
 
 class Act(StrictBaseModel):
     whom: str
-    year: int
-    number: int
+    year: Optional[int]
+    number: Optional[int]
