@@ -299,7 +299,9 @@ def get_notice_from_multi_notice_pdf(
     pdf_page_num = match["page_number"]
     pdf_issn_num = detect_issn_num(text)
     pdf_type_major = detect_major_type_from_notice_number(notice_number)
-    pdf_type_minor = detect_minor_pdf_type(match["logical_line"], pages=pages)
+    pdf_type_minor = detect_minor_pdf_type(
+        match["logical_line"], pages=pages, notice_number=notice_number
+    )
     pdf_text = cached_llm.summarize(match["notice_description"])
 
     return Notice(

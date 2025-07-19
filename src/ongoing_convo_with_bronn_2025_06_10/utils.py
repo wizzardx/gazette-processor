@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
 from .pdf_parser_multi_leading_r_notice import (
+    get_act_leading_r_from_multi_notice_pdf,
     get_notice_leading_r_from_multi_notice_pdf,
 )
 from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
@@ -508,7 +509,9 @@ class UnableToGetActInfo(ValueError):
 
 
 @typechecked
-def decode_complex_pdf_type_minor(text: str, pages: list[str]) -> Act:
+def decode_complex_pdf_type_minor(
+    text: str, pages: list[str], notice_number: int
+) -> Act:
     """
     Extract act information from legal text.
 
@@ -638,12 +641,20 @@ def decode_complex_pdf_type_minor(text: str, pages: list[str]) -> Act:
                                         year=None,
                                     )
                                 else:
-                                    print2("----------------------")
-                                    print2(pages[1])
-                                    print2("----------------------")
-                                    raise UnableToGetActInfo(
-                                        "No act information found in the provided text"
-                                    )
+                                    # Special case, we might end up with a bunch of R-prefixed lines here. We can parse through them and look for any specific law detail that match our Notice Number.
+                                    if looks_like_pdf_with_r_leading_notices(page2):
+                                        act = get_act_leading_r_from_multi_notice_pdf(
+                                            text=page2,
+                                            notice_number=notice_number,
+                                        )
+                                        return act
+                                    else:
+                                        print2("----------------------")
+                                        print2(pages[1])
+                                        print2("----------------------")
+                                        raise UnableToGetActInfo(
+                                            "No act information found in the provided text"
+                                        )
 
                             else:
                                 print2("----------------------")
@@ -1007,7 +1018,7 @@ def looks_like_pdf_with_r_leading_notices(text: str) -> bool:
 
 
 @typechecked()
-def detect_minor_pdf_type(text: str, pages: list[str]) -> str:
+def detect_minor_pdf_type(text: str, pages: list[str], notice_number: int) -> str:
     # Determine the minor type by searching the full text
     full_text_lower = text.lower()
     if "department of sports, arts and culture" in full_text_lower:
@@ -1030,7 +1041,9 @@ def detect_minor_pdf_type(text: str, pages: list[str]) -> str:
         # - SKILLS DEVELOPMENT ACT 97 OF 1998
         # - COMPETITION ACT 89 OF 1998
         try:
-            act = decode_complex_pdf_type_minor(text, pages=pages)
+            act = decode_complex_pdf_type_minor(
+                text, pages=pages, notice_number=notice_number
+            )
         except UnableToGetActInfo as ex:
             ic()
             logger.exception("Error decoding Act-related details.")
