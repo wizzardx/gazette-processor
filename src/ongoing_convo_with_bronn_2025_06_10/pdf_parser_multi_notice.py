@@ -53,26 +53,102 @@ def parse_gazette_document(text: str) -> list[dict[str, Any]]:
 
 def _extract_logical_lines(text: str) -> list[str]:
     """
-    Internal function to extract logical lines based on start and end patterns.
-    Does not rely on newline splitting for edge cases.
+    RECOMMENDED FUNCTION: Use this function to extract logical lines from your text.
+
+    This function robustly handles edge cases including:
+    - Lines without dots (like 3379) being incorrectly merged with subsequent lines
+    - Continuation lines (like "2025 ........... 53025 81") being treated as separate entries
+    - Text that doesn't rely on consistent newline formatting
+
+    Args:
+        text (str): The input text containing logical lines
+
+    Returns:
+        list[str]: List of cleaned logical lines, each starting with a 3-4 digit number
+
+    Example:
+        logical_lines = _extract_logical_lines(your_text)
     """
-    # Pattern to match complete logical lines from start to end
-    # Uses MULTILINE for ^ and $ to work on individual lines
-    # Uses DOTALL so .* can match across newlines if needed
-    logical_line_pattern = re.compile(
-        r"^(\d{3,4}\s+.*?\.{3,}\s+\d+\s+\d+\s*)$", re.MULTILINE | re.DOTALL
-    )
-
-    # Find all logical lines
-    matches = logical_line_pattern.findall(text)
-
-    # Clean up each logical line by normalizing whitespace
     logical_lines = []
-    for match in matches:
-        # Replace any sequence of whitespace (including newlines) with single spaces
-        # and strip leading/trailing whitespace
-        cleaned_line = re.sub(r"\s+", " ", match).strip()
-        logical_lines.append(cleaned_line)
+
+    # Split into lines first to make processing easier
+    lines = text.split("\n")
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Check if this line starts a logical entry
+        start_match = re.match(r"^(\d{3,4})\s+", line)
+        if not start_match:
+            i += 1
+            continue
+
+        # Start building the logical line
+        logical_line_parts = [line]
+
+        # Look ahead for continuation lines or end pattern
+        j = i + 1
+        found_end = False
+
+        # Check if current line already has the end pattern
+        if re.search(r"\.{3,}\s+\d+\s+\d+\s*$", line):
+            found_end = True
+        elif re.search(r"\s+\d+\s+\d+\s*$", line):
+            # Line ends with just numbers (like line 3379)
+            found_end = True
+
+        # If we haven't found the end, look at subsequent lines
+        while j < len(lines) and not found_end:
+            next_line = lines[j].strip()
+
+            # Check if next line starts a new logical entry (and isn't a continuation)
+            next_start_match = re.match(r"^(\d{3,4})\s+", next_line)
+
+            if next_start_match:
+                # Check if this is a continuation line (starts with year + lots of dots)
+                content_after_number = next_line[len(next_start_match.group(0)) :]
+                is_year_continuation = (
+                    len(next_start_match.group(1)) == 4  # 4-digit number (year)
+                    and re.search(r"\.{10,}", content_after_number)  # Lots of dots
+                    and re.search(
+                        r"\.{3,}\s+\d+\s+\d+\s*$", next_line
+                    )  # Ends with pattern
+                    and not re.search(
+                        r"[A-Za-z]{10,}", content_after_number
+                    )  # Not much text content
+                )
+
+                if is_year_continuation:
+                    # This is a continuation line
+                    logical_line_parts.append(next_line)
+                    found_end = True
+                    j += 1
+                    break
+                else:
+                    # This is a new logical line start, stop here
+                    break
+            else:
+                # Not a start line, could be a continuation
+                logical_line_parts.append(next_line)
+
+                # Check if this line has the end pattern
+                if re.search(r"\.{3,}\s+\d+\s+\d+\s*$", next_line):
+                    found_end = True
+                    j += 1
+                    break
+
+            j += 1
+
+        # Join the parts and clean up
+        full_logical_line = " ".join(logical_line_parts)
+        cleaned_line = re.sub(r"\s+", " ", full_logical_line).strip()
+
+        if cleaned_line:
+            logical_lines.append(cleaned_line)
+
+        # Move to the next unprocessed line
+        i = j
 
     return logical_lines
 
