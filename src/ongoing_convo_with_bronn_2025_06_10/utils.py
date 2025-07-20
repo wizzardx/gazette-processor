@@ -689,7 +689,7 @@ def detect_major_type_from_notice_number(pdf_gen_n_num: int) -> MajorType:
     # "Number range: Currently I believe Procs in the 200s, BNs in the 700s, GenNs in the 3000s and GNs in the 7000s"
     if 200 <= n < 300:
         return MajorType.PROCLAMATION
-    elif 700 <= n < 800:
+    elif 700 <= n < 900:
         return MajorType.BOARD_NOTICE
     if 3000 <= n < 4000:
         return MajorType.GENERAL_NOTICE

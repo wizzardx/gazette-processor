@@ -45,53 +45,39 @@ def parse_gazette_document(text: str) -> list[dict[str, Any]]:
     return parsed_entries
 
 
+# Claude is helping with this function:
+# https://claude.ai/chat/e029ab6a-209f-47bb-8ed4-3626a4101043
+
+############
+
+
 def _extract_logical_lines(text: str) -> list[str]:
     """
-    Internal function to join split logical lines into single lines.
+    Internal function to extract logical lines based on start and end patterns.
+    Does not rely on newline splitting for edge cases.
     """
-    lines = text.split("\n")
+    # Pattern to match complete logical lines from start to end
+    # Uses MULTILINE for ^ and $ to work on individual lines
+    # Uses DOTALL so .* can match across newlines if needed
+    logical_line_pattern = re.compile(
+        r"^(\d{3,4}\s+.*?\.{3,}\s+\d+\s+\d+\s*)$", re.MULTILINE | re.DOTALL
+    )
+
+    # Find all logical lines
+    matches = logical_line_pattern.findall(text)
+
+    # Clean up each logical line by normalizing whitespace
     logical_lines = []
-    current_logical_line: list[str] = []
-    in_logical_line = False
-
-    # Pattern to match the start of a logical line (3 of 4-digit code at line start)
-    start_pattern = re.compile(r"^\d{3,4}\s+")
-
-    # Pattern to match the end of a logical line (dots followed by numbers)
-    end_pattern = re.compile(r"\.{3,}\s+\d+\s+\d+\s*$")
-
-    for line in lines:
-        # Check if this line starts a new logical line
-        if start_pattern.match(line):
-            # If we were already building a logical line, save it first
-            if current_logical_line:
-                logical_lines.append(" ".join(current_logical_line))
-
-            # Start new logical line
-            current_logical_line = [line.strip()]
-            in_logical_line = True
-
-            # Check if this line also ends the logical line (single-line entry)
-            if end_pattern.search(line):
-                logical_lines.append(" ".join(current_logical_line))
-                current_logical_line = []
-                in_logical_line = False
-
-        elif in_logical_line:
-            # Continue building the current logical line
-            current_logical_line.append(line.strip())
-
-            # Check if this line ends the logical line
-            if end_pattern.search(line):
-                logical_lines.append(" ".join(current_logical_line))
-                current_logical_line = []
-                in_logical_line = False
-
-    # Don't forget any remaining logical line
-    if current_logical_line:
-        logical_lines.append(" ".join(current_logical_line))
+    for match in matches:
+        # Replace any sequence of whitespace (including newlines) with single spaces
+        # and strip leading/trailing whitespace
+        cleaned_line = re.sub(r"\s+", " ", match).strip()
+        logical_lines.append(cleaned_line)
 
     return logical_lines
+
+
+############
 
 
 def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
