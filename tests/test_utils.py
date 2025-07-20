@@ -385,13 +385,6 @@ class TestParseSingleEntry:
         assert result["gazette_number"] == 52724
         assert result["page_number"] == 3
 
-    def test_invalid_format(self):
-        """Test invalid format handling"""
-        line = "Invalid line format without proper structure"
-        # This should trigger the assert 0 in the function
-        with pytest.raises(AssertionError):
-            _parse_single_entry(line)
-
 
 class TestParseGazetteDocument:
     """Tests for parse_gazette_document function"""

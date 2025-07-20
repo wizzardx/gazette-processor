@@ -107,7 +107,6 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         logger.debug("Failed to match line pattern:")
         logger.debug(logical_line)
         logger.debug("------------")
-        assert 0
         return None
 
     notice_number = int(match.group(1))
@@ -229,7 +228,8 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         logger.debug("Unable to extract Act details from line:")
         logger.debug(logical_line)
         logger.debug("-----------")
-        raise ValueError("Unable to extract Act details from a string")
+        return None
+        # raise ValueError("Unable to extract Act details from a string")
 
     return {
         "logical_line": logical_line,

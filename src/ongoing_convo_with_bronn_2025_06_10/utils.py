@@ -952,22 +952,21 @@ def detect_page_number(text: str) -> int:
 @typechecked
 def looks_like_pdf_with_long_list_of_notices(text: str) -> bool:
     """
-    Check if the text contains 3 or more consecutive lines that start with 4-digit numbers.
+    Check if the text contains 3 or more lines that start with 4-digit numbers.
 
     Args:
         text (str): The input text to check
 
     Returns:
-        bool: True if there are 3+ consecutive lines starting with 4-digit numbers, False otherwise
+        bool: True if there are 3+ lines starting with 4-digit numbers, False otherwise
     """
     # Split the text into lines
     lines = text.split("\n")
 
+    match_count = 0
+
     # Pattern to match a line starting with exactly 4 digits followed by whitespace or non-digit
     pattern = re.compile(r"^(\d{4})(?:\s|[^\d])")
-
-    consecutive_count = 0
-    max_consecutive = 0
 
     for line in lines:
         # Strip leading/trailing whitespace for checking
@@ -975,17 +974,9 @@ def looks_like_pdf_with_long_list_of_notices(text: str) -> bool:
 
         # Check if line starts with 4-digit number
         if trimmed_line and pattern.match(trimmed_line):
-            consecutive_count += 1
-            max_consecutive = max(max_consecutive, consecutive_count)
-        else:
-            # Reset counter if line doesn't match pattern
-            consecutive_count = 0
+            match_count += 1
 
-    # print("------------")
-    # print(text)
-    # print("------------")
-    #
-    return max_consecutive >= 3
+    return match_count >= 3
 
 
 @typechecked
