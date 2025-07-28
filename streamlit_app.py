@@ -1206,8 +1206,6 @@ def generate_bulletin_page():
                     # Clean up temp files
                     if os.path.exists(temp_csv_path):
                         os.remove(temp_csv_path)
-                    if os.path.exists("notices.csv"):
-                        os.remove("notices.csv")
 
                     if bulletin_content:
                         st.success("✅ Bulletin generated successfully!")
@@ -1381,8 +1379,6 @@ def generate_bulletin_page():
                     # Clean up temp files
                     if os.path.exists(temp_csv_path):
                         os.remove(temp_csv_path)
-                    if os.path.exists("notices.csv"):
-                        os.remove("notices.csv")
 
             except Exception as e:
                 st.error(f"❌ Error preparing bulletin data: {str(e)}")

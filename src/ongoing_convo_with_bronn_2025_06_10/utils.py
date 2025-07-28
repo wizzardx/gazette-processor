@@ -31,8 +31,7 @@ from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
 from .pdf_parser_multi_leading_r_notice import (
     get_act_leading_r_from_multi_notice_pdf,
-    get_notice_leading_r_from_multi_notice_pdf,
-)
+    get_notice_leading_r_from_multi_notice_pdf)
 from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
 from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
@@ -170,17 +169,33 @@ def output_testing_bulletin(gg_dir: Path) -> None:
     csvreader = csv.DictReader(f)
     row = next(csvreader)
 
+    notices_with_technical_issues: list[tuple[int, int]] = []
+
     # We can comment out the below assignment during development to assist with
-    # debugging.
-    notice = get_notice_for_gg_num(
-        gg_number=int(row["gazette_number"]),
-        notice_number=int(row["notice_number"]),
-        cached_llm=cached_llm,
-        gg_dir=gg_dir,
-    )
+    # debugging. Alternately: When the first GG number is unable to be
+    # extracted, then it causes some run-on issues in this function which
+    # assumes that it's valid.
+    gg_number = int(row["gazette_number"])
+    notice_number = int(row["notice_number"])
+    cached_llm = cached_llm
+    gg_dir = gg_dir
+    notice = None
+
+    try:
+        notice = get_notice_for_gg_num(
+            gg_number=gg_number,
+            notice_number=notice_number,
+            cached_llm=cached_llm,
+            gg_dir=gg_dir,
+        )
+    except Exception as e:
+        logger.exception(
+            f"There was a problem processing Notice {notice_number} in Government Gazette {gg_number}: {e!r}"
+        )
+        notices_with_technical_issues.append((notice_number, gg_number))
 
     if notice is None:
-        logger.warning("The first Notice was disabled for debug purposes.")
+        logger.warning("The first Notice is not available.")
         print1()
 
     print1("# **JUTA'S WEEKLY STATUTES BULLETIN**")
@@ -418,8 +433,6 @@ def output_testing_bulletin(gg_dir: Path) -> None:
     #     6210   52704
     #
     # """
-
-    notices_with_technical_issues: list[tuple[int, int]] = []
 
     for item in csvreader:
         notice_num = int(item["notice_number"])

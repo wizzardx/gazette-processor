@@ -18,7 +18,7 @@ def cli() -> None:
 
 
 GG_DIR = Path(
-    "/home/david/dev/misc/bronnwyn-stuff/ongoing_convo_with_bronn_2025_06_10/bronnwyn_data_2025-07-18/her_inputs/"
+    "/home/david/dev/misc/bronnwyn-stuff/ongoing_convo_with_bronn_2025_06_10/bronnwyn_data_2025-07-28/inputs/"
 )
 
 
