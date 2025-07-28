@@ -1,3 +1,8 @@
+import streamlit as st
+
+# Configure page FIRST before any other Streamlit commands
+st.set_page_config(page_title="GG Annotation System", page_icon="🏛️", layout="wide")
+
 import hashlib
 import json
 import os
@@ -14,7 +19,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pandas as pd
-import streamlit as st
 import streamlit_cookies_manager
 
 # Add the project root to the path for imports
@@ -1239,8 +1243,6 @@ def generate_bulletin_page():
 
 
 # Main app
-st.set_page_config(page_title="GG Annotation System", page_icon="🏛️", layout="wide")
-
 # Check password before showing main content
 if not check_password():
     st.stop()  # Stop execution here if password is incorrect
