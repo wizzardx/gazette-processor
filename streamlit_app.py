@@ -616,6 +616,77 @@ def upload_pdf_page():
             )
 
 
+def auto_detect_notice_numbers(pdf_path: str) -> list[int]:
+    """Auto-detect notice numbers by finding 3-4 digit numbers in the second page of the PDF that are actually retrievable as notices."""
+    try:
+        import re
+        from pathlib import Path
+
+        from ongoing_convo_with_bronn_2025_06_10.cached_llm import CachedLLM
+        from ongoing_convo_with_bronn_2025_06_10.utils import (
+            get_notice_for_gg,
+            load_or_scan_pdf_text,
+        )
+
+        # Load the PDF text
+        text, pages = load_or_scan_pdf_text(Path(pdf_path))
+
+        notice_numbers = []
+
+        # Only use the second page if it exists, otherwise return empty list
+        if len(pages) < 2:
+            return []
+
+        page_text = pages[1]  # Second page (0-indexed)
+
+        # Find all 3-4 digit numbers in the page
+        pattern = r"\b(\d{3,4})\b"
+        matches = re.findall(pattern, page_text)
+
+        if matches:
+            try:
+                potential_numbers = [int(match) for match in matches]
+                # Filter to 3-4 digit numbers only
+                filtered_numbers = [n for n in potential_numbers if 100 <= n <= 9999]
+
+                # Extract gazette number from filename for validation
+                filename = os.path.basename(pdf_path)
+                base_name = os.path.splitext(filename)[0]
+                match = re.search(r"(?<!\d)5\d{4}(?!\d)", base_name)
+                if not match:
+                    return []
+
+                gg_number = int(match.group())
+                cached_llm = CachedLLM()
+
+                # Validate each number by attempting to retrieve it as a notice
+                for num in filtered_numbers:
+                    try:
+                        notice = get_notice_for_gg(
+                            p=Path(pdf_path),
+                            gg_number=gg_number,
+                            notice_number=num,
+                            cached_llm=cached_llm,
+                        )
+                        if notice is not None:
+                            notice_numbers.append(num)
+                    except Exception:
+                        # If we can't retrieve the notice, skip this number
+                        continue
+
+            except ValueError:
+                pass
+
+        # Remove duplicates and sort
+        notice_numbers = sorted(list(set(notice_numbers)))
+
+        return notice_numbers
+
+    except Exception as e:
+        st.error(f"Error auto-detecting notice numbers: {str(e)}")
+        return []
+
+
 def annotate_pdf_page():
     """Page for annotating GG PDF files"""
     st.title("✏️ Annotate Government Gazette PDF Files")
@@ -630,6 +701,7 @@ def annotate_pdf_page():
         2. Enter notice numbers as space-separated 3 or 4-digit numbers (e.g., "123 4567 890")
         3. Changes are saved automatically when you move to the next field
         4. Click **Save All Changes** button to ensure all changes are persisted
+        5. Use **Auto-detect Notice Numbers** button to automatically extract notice numbers from PDFs
         """
         )
 
@@ -661,12 +733,86 @@ def annotate_pdf_page():
     st.markdown("---")
     st.subheader(f"PDF Files ({len(pdf_files)} files)")
 
-    # Show file server info
-    if FILE_SERVER_PORT:
-        server_host = os.environ.get("PDF_SERVER_HOST", "localhost")
-        st.info(
-            f"🔗 PDF file server running on {server_host}:{FILE_SERVER_PORT} - Click any filename below to view the PDF!"
-        )
+    # Add Auto-detect Notice Numbers button
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        # Show file server info
+        if FILE_SERVER_PORT:
+            server_host = os.environ.get("PDF_SERVER_HOST", "localhost")
+            st.info(
+                f"🔗 PDF file server running on {server_host}:{FILE_SERVER_PORT} - Click any filename below to view the PDF!"
+            )
+
+    with col2:
+        if st.button(
+            "🔍 Auto-detect Notice Numbers",
+            type="primary",
+            help="Automatically detect notice numbers from all PDF files",
+        ):
+            with st.spinner("Auto-detecting notice numbers from PDF files..."):
+                detection_results = []
+                updated_files = 0
+
+                for filename in pdf_files:
+                    file_path = os.path.join(storage_dir, filename)
+                    base_name = os.path.splitext(filename)[0]
+                    annotation_file_path = os.path.join(
+                        annotations_dir, f"{base_name}.json"
+                    )
+
+                    # Auto-detect notice numbers
+                    detected_numbers = auto_detect_notice_numbers(file_path)
+
+                    if detected_numbers:
+                        # Load existing annotations or create new ones
+                        current_annotations = {
+                            "publication_date": None,
+                            "notice_numbers": [],
+                        }
+                        if os.path.exists(annotation_file_path):
+                            try:
+                                with open(annotation_file_path, "r") as f:
+                                    current_annotations = json.load(f)
+                            except:
+                                pass
+
+                        # Update notice numbers (don't overwrite publication date)
+                        current_annotations["notice_numbers"] = detected_numbers
+
+                        # Save updated annotations
+                        try:
+                            with open(annotation_file_path, "w") as f:
+                                json.dump(current_annotations, f, indent=2)
+                            detection_results.append(
+                                f"✅ {filename}: {', '.join(map(str, detected_numbers))}"
+                            )
+                            updated_files += 1
+                        except Exception as e:
+                            detection_results.append(
+                                f"❌ {filename}: Error saving - {str(e)}"
+                            )
+                    else:
+                        detection_results.append(
+                            f"⚠️ {filename}: No notice numbers detected"
+                        )
+
+                # Show results
+                if updated_files > 0:
+                    st.success(
+                        f"🎉 Successfully auto-detected notice numbers for {updated_files} file(s)!"
+                    )
+                else:
+                    st.warning(
+                        "⚠️ No notice numbers could be detected from the PDF files."
+                    )
+
+                # Show detailed results
+                with st.expander("📄 Detection Results"):
+                    for result in detection_results:
+                        st.write(result)
+
+                # Refresh the page to show updated data
+                st.rerun()
 
     # Start the file server
     start_file_server()
