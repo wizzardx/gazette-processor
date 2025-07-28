@@ -427,7 +427,6 @@ def output_testing_bulletin(gg_dir: Path) -> None:
         try:
             print_notice(notice_num, gg_num)
         except Exception as e:
-            raise  # TODO: Remove this line.
             logger.exception(
                 f"There was a problem processing Notice {notice_num} in Government Gazette {gg_num}: {e!r}"
             )
