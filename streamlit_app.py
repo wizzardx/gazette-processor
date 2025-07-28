@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
+import streamlit_cookies_manager
 
 # Add the project root to the path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
@@ -32,6 +33,19 @@ TARGET_HASH = "332ae4926cbb3e66ecb24b356318eacac8470cf8fba264fafa3238c710dc87dd"
 
 # Global variable to store the file server port
 FILE_SERVER_PORT = None
+
+# Global cookie manager instance
+_cookie_manager = None
+
+
+def get_cookie_manager():
+    """Get a centralized cookie manager instance to avoid duplicate keys"""
+    global _cookie_manager
+    if _cookie_manager is None:
+        _cookie_manager = streamlit_cookies_manager.EncryptedCookieManager(
+            prefix="gg_auth_", password="gg_auth_secret_key_2025"
+        )
+    return _cookie_manager
 
 
 class PDFFileHandler(SimpleHTTPRequestHandler):
@@ -151,11 +165,42 @@ def is_valid_filename(filename):
 def check_password():
     """Returns True if the user has entered the correct password"""
 
+    # Get centralized cookie manager instance
+    cookies = get_cookie_manager()
+
+    if not cookies.ready():
+        st.stop()
+
+    # Check if authentication cookie exists and is valid
+    auth_cookie = cookies.get("authenticated")
+    auth_timestamp = cookies.get("auth_timestamp")
+
+    if auth_cookie == "true" and auth_timestamp:
+        try:
+            # Check if cookie has expired (30 days = 2592000 seconds)
+            auth_time = float(auth_timestamp)
+            current_time = time.time()
+            cookie_age = current_time - auth_time
+
+            if cookie_age < 2592000:  # 30 days in seconds
+                st.session_state["password_correct"] = True
+                return True
+            else:
+                # Cookie expired, clear it
+                cookies["authenticated"] = ""
+                cookies["auth_timestamp"] = ""
+                cookies.save()
+        except (ValueError, TypeError):
+            # Invalid timestamp, clear cookies
+            cookies["authenticated"] = ""
+            cookies["auth_timestamp"] = ""
+            cookies.save()
+
     # Initialize session state
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
 
-    # Return True if password was already entered correctly
+    # Return True if password was already entered correctly in this session
     if st.session_state["password_correct"]:
         return True
 
@@ -170,6 +215,10 @@ def check_password():
 
             if password_hash == TARGET_HASH:
                 st.session_state["password_correct"] = True
+                # Set authentication cookie with timestamp for 30 days
+                cookies["authenticated"] = "true"
+                cookies["auth_timestamp"] = str(time.time())
+                cookies.save()
                 st.success("✅ Password correct! Access granted.")
                 st.rerun()
             else:
@@ -1242,6 +1291,14 @@ st.session_state["current_page"] = page_mapping.get(page, page)
 # Logout button in sidebar
 st.sidebar.markdown("---")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
+    # Clear authentication cookie using centralized manager
+    cookies = get_cookie_manager()
+
+    if cookies.ready():
+        cookies["authenticated"] = ""  # Clear the cookie
+        cookies["auth_timestamp"] = ""  # Clear the timestamp
+        cookies.save()
+
     # Clear all session state
     keys_to_remove = []
     for key in st.session_state.keys():
