@@ -31,8 +31,12 @@ from .cached_llm import CachedLLM
 from .common_types import Act, MajorType, Notice
 from .pdf_parser_multi_leading_r_notice import (
     get_act_leading_r_from_multi_notice_pdf,
-    get_notice_leading_r_from_multi_notice_pdf)
-from .pdf_parser_multi_notice import get_notice_from_multi_notice_pdf
+    get_notice_leading_r_from_multi_notice_pdf,
+)
+from .pdf_parser_multi_notice import (
+    get_act_from_multi_notice_pdf,
+    get_notice_from_multi_notice_pdf,
+)
 from .pdf_parser_single_notice import get_notice_from_single_notice_pdf
 
 # Note: List of all of the abbreviations can be found in the footer of the docs
@@ -657,6 +661,14 @@ def decode_complex_pdf_type_minor(
                                     # Special case, we might end up with a bunch of R-prefixed lines here. We can parse through them and look for any specific law detail that match our Notice Number.
                                     if looks_like_pdf_with_r_leading_notices(page2):
                                         act = get_act_leading_r_from_multi_notice_pdf(
+                                            text=page2,
+                                            notice_number=notice_number,
+                                        )
+                                        return act
+                                    elif looks_like_pdf_with_long_list_of_notices(
+                                        page2
+                                    ):
+                                        act = get_act_from_multi_notice_pdf(
                                             text=page2,
                                             notice_number=notice_number,
                                         )

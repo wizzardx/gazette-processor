@@ -5,7 +5,7 @@ from typing import Any, Optional
 from typeguard import typechecked
 
 from .cached_llm import CachedLLM
-from .common_types import MajorType, Notice
+from .common_types import Act, MajorType, Notice
 
 logger = logging.getLogger(__name__)
 
@@ -153,13 +153,34 @@ def _extract_logical_lines(text: str) -> list[str]:
     return logical_lines
 
 
+def get_act_from_multi_notice_pdf(text: str, notice_number: int) -> Act:
+    logical_lines = _extract_logical_lines(text)
+
+    for line in logical_lines:
+        if str(notice_number) in line:
+            parsed = _parse_single_entry(line)
+            if parsed is not None:
+                return Act(
+                    whom=parsed["law_description"],
+                    year=parsed["law_year"],
+                    number=parsed["law_number"],
+                )
+    assert 0
+
+
 ############
+
+# Claude is helping with this function over here:
+# https://claude.ai/chat/efbd9b10-8f19-4e4a-a7c4-c99c0731d8d5
+
+#########
 
 
 def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     """
     Internal function to parse a single logical line into structured data.
     """
+
     # Pattern to extract all components
     # Groups: (1) notice_number (2) content before dots (3) gazette_number (4) page_number
     main_pattern = re.compile(r"^(\d{3,4})\s+(.+?)\.{3,}\s+(\d+)\s+(\d+)\s*$")
@@ -183,7 +204,8 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     # 3. Year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
     # 4. Afrikaans format: "Wet op Something (28/2011)"
     # 5. No parentheses format: "Something Act, No. 56 of 1996"
-    # 6. Afrikaans ending in "wet": "Somethingwet, No. 56 van 1996"
+    # 6. Simple format: "Something Act, 56 of 1996" (without "No.")
+    # 7. Afrikaans ending in "wet": "Somethingwet, No. 56 van 1996"
 
     act_match = None
     law_description = None
@@ -212,66 +234,78 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
             law_number = int(act_match.group(2))
             law_year = int(act_match.group(3))
         else:
-            # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
-            act_pattern_with_year = re.compile(
-                r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)",
-                re.IGNORECASE,
+            # Try simple format without "No.": "Something Act, 56 of 1996"
+            act_pattern_simple = re.compile(
+                r"^(.+?)\s+Act,\s*(\d+)\s+of\s+(\d{4})", re.IGNORECASE
             )
-            act_match = act_pattern_with_year.search(content)
+            act_match = act_pattern_simple.search(content)
 
             if act_match:
                 law_description = act_match.group(1).strip()
-                law_year = int(act_match.group(2))
-                law_number = int(act_match.group(3))
+                law_number = int(act_match.group(2))
+                law_year = int(act_match.group(3))
             else:
-                # Try alternative English format with "Act No." or "No."
-                act_pattern_alternative = re.compile(
-                    r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)",
+                # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
+                act_pattern_with_year = re.compile(
+                    r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)",
                     re.IGNORECASE,
                 )
-                act_match = act_pattern_alternative.search(content)
+                act_match = act_pattern_with_year.search(content)
 
                 if act_match:
                     law_description = act_match.group(1).strip()
-                    law_number = int(act_match.group(2))
-                    law_year = int(act_match.group(3))
+                    law_year = int(act_match.group(2))
+                    law_number = int(act_match.group(3))
                 else:
-                    # Try Afrikaans format - Wet at the beginning
-                    act_pattern_afrikaans = re.compile(
-                        r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
+                    # Try alternative English format with "Act No." or "No."
+                    act_pattern_alternative = re.compile(
+                        r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)",
+                        re.IGNORECASE,
                     )
-                    act_match = act_pattern_afrikaans.search(content)
+                    act_match = act_pattern_alternative.search(content)
 
                     if act_match:
-                        # For Afrikaans format, prepend "Wet" to the description
-                        law_description = "Wet " + act_match.group(1).strip()
+                        law_description = act_match.group(1).strip()
                         law_number = int(act_match.group(2))
                         law_year = int(act_match.group(3))
                     else:
-                        # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
-                        act_pattern_afrikaans_no_parens = re.compile(
-                            r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})", re.IGNORECASE
+                        # Try Afrikaans format - Wet at the beginning
+                        act_pattern_afrikaans = re.compile(
+                            r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
                         )
-                        act_match = act_pattern_afrikaans_no_parens.search(content)
+                        act_match = act_pattern_afrikaans.search(content)
 
                         if act_match:
-                            law_description = act_match.group(1).strip()
+                            # For Afrikaans format, prepend "Wet" to the description
+                            law_description = "Wet " + act_match.group(1).strip()
                             law_number = int(act_match.group(2))
                             law_year = int(act_match.group(3))
                         else:
-                            # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
-                            act_pattern_afrikaans_with_parens = re.compile(
-                                r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)",
+                            # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
+                            act_pattern_afrikaans_no_parens = re.compile(
+                                r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})",
                                 re.IGNORECASE,
                             )
-                            act_match = act_pattern_afrikaans_with_parens.search(
-                                content
-                            )
+                            act_match = act_pattern_afrikaans_no_parens.search(content)
 
                             if act_match:
                                 law_description = act_match.group(1).strip()
                                 law_number = int(act_match.group(2))
                                 law_year = int(act_match.group(3))
+                            else:
+                                # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
+                                act_pattern_afrikaans_with_parens = re.compile(
+                                    r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)",
+                                    re.IGNORECASE,
+                                )
+                                act_match = act_pattern_afrikaans_with_parens.search(
+                                    content
+                                )
+
+                                if act_match:
+                                    law_description = act_match.group(1).strip()
+                                    law_number = int(act_match.group(2))
+                                    law_year = int(act_match.group(3))
 
     if act_match:
         # Extract the notice description (everything after the Act info)
@@ -303,6 +337,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         "page_number": page_number,
         "notice_description": notice_description,
     }
+
+
+#########
 
 
 @typechecked
@@ -338,6 +375,7 @@ def get_notice_from_multi_notice_pdf(
             else:
                 # We work with the first version in our report (often English)
                 match = row
+
     if match is None:
         raise ValueError(f"Unable to find details for notice {notice_number}")
 
