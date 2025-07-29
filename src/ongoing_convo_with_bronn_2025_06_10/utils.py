@@ -1051,6 +1051,8 @@ def detect_minor_pdf_type(text: str, pages: list[str], notice_number: int) -> st
         return "STATE INFORMATION TECHNOLOGY AGENCY ACT 88 OF 1998"
     elif "mineral resources development bill" in full_text_lower:
         return "BILL"
+    elif "forestry, fisheries and the environment" in full_text_lower:
+        return "Forestry, Fisheries and the Environment".upper()
     else:
         # Over here, we work with types of eg:
         # - ROAD ACCIDENT FUND ACT 56 OF 1996
