@@ -257,9 +257,9 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                     law_year = int(act_match.group(2))
                     law_number = int(act_match.group(3))
                 else:
-                    # Try alternative English format with "Act No." or "No."
+                    # Try alternative English format with "Act No." or "No." or just "Act"
                     act_pattern_alternative = re.compile(
-                        r"^(.+?)\s+Act\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+(\d{4})\)",
+                        r"^(.+?)\s+Act\s*\((?:Act\s+)?(?:No\.?\s*)?(\d+)\s+of\s+(\d{4})\)",
                         re.IGNORECASE,
                     )
                     act_match = act_pattern_alternative.search(content)
