@@ -338,11 +338,34 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         # Remove leading colons and whitespace
         notice_description = remaining_content.lstrip(":").strip()
     else:
-        logger.debug("Unable to extract Act details from line:")
-        logger.debug(logical_line)
-        logger.debug("-----------")
-        return None
-        # raise ValueError("Unable to extract Act details from a string")
+        # Check if this is a Bill format (fallback when no Act patterns match)
+        if "Bill" in content:
+            # Try to extract Bill information: "Something Bill, YYYY"
+            bill_pattern = re.compile(r"^(.+?)\s+Bill(?:,\s*\d{4})?", re.IGNORECASE)
+            bill_match = bill_pattern.search(content)
+
+            if bill_match:
+                law_description = bill_match.group(1).strip()
+                law_number = None  # Bills don't have law numbers
+                law_year = None  # Set year to None as requested
+
+                # Extract the notice description (everything after the Bill info)
+                bill_end = bill_match.end()
+                remaining_content = content[bill_end:].strip()
+
+                # Remove leading colons, commas, and whitespace
+                notice_description = remaining_content.lstrip(":,").strip()
+            else:
+                logger.debug("Unable to extract Bill details from line:")
+                logger.debug(logical_line)
+                logger.debug("-----------")
+                return None
+        else:
+            logger.debug("Unable to extract Act details from line:")
+            logger.debug(logical_line)
+            logger.debug("-----------")
+            return None
+            # raise ValueError("Unable to extract Act details from a string")
 
     return {
         "logical_line": logical_line,
