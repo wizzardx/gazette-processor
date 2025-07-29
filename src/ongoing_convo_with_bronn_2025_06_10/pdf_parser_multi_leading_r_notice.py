@@ -143,6 +143,7 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     law_number = None
     law_year = None
     notice_description = None
+    is_constitutional = False
 
     # Special case handling for Customs and Excise Act (English and Afrikaans)
     if "Customs and Excise Act" in content or "Doeane- en Aksynswet" in content:
@@ -162,6 +163,30 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
             notice_description = customs_match.group(3).strip()
             act_match = (
                 customs_match  # Set this so we don't go through the other patterns
+            )
+
+    # Special case handling for Constitution of South Africa (English and Afrikaans)
+    elif (
+        "Constitution of the Republic of South Africa" in content
+        or "Grondwet van die Republiek van Suid-Afrika" in content
+    ):
+        # Pattern for "Constitution of the Republic of South Africa, YYYY: description" or "Grondwet van die Republiek van Suid-Afrika, YYYY: description"
+        constitution_pattern = re.compile(
+            r"^(Constitution of the Republic of South Africa|Grondwet van die Republiek van Suid-Afrika),\s*(\d{4})\s*:\s*(.+)",
+            re.IGNORECASE,
+        )
+        constitution_match = constitution_pattern.search(content)
+
+        if constitution_match:
+            law_description = constitution_match.group(
+                1
+            )  # Use the matched constitution name (English or Afrikaans)
+            law_number = None  # No act number for constitutional references
+            law_year = int(constitution_match.group(2))
+            notice_description = constitution_match.group(3).strip()
+            is_constitutional = True
+            act_match = (
+                constitution_match  # Set this so we don't go through the other patterns
             )
 
     # Only try other patterns if we haven't matched the special case
@@ -308,6 +333,7 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
         "gazette_number": gazette_number,
         "page_number": page_number,
         "notice_description": notice_description,
+        "is_constitutional": is_constitutional,
     }
 
 
