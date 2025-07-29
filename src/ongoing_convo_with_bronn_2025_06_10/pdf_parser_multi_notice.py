@@ -200,12 +200,13 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
     # Extract law information from content
     # Try multiple patterns:
     # 1. Standard format: "Something Act (3/1996)"
-    # 2. Alternative format: "Something Act (Act No.36 of 1947)" or "(No.36 of 1947)"
-    # 3. Year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
-    # 4. Afrikaans format: "Wet op Something (28/2011)"
-    # 5. No parentheses format: "Something Act, No. 56 of 1996"
-    # 6. Simple format: "Something Act, 56 of 1996" (without "No.")
-    # 7. Afrikaans ending in "wet": "Somethingwet, No. 56 van 1996"
+    # 2. Alternative format: "Something Act (Act No.36 of 1947)" or "(No.36 of 1947)" or "(Act 36 of 1947)"
+    # 3. No parentheses format: "Something Act, No. 56 of 1996"
+    # 4. Simple format: "Something Act, 56 of 1996" (without "No.")
+    # 5. Abbreviation format: "Something Act (abbrev), Act No. 70 of 1970"
+    # 6. Year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
+    # 7. Afrikaans format: "Wet op Something (28/2011)"
+    # 8. Afrikaans ending in "wet": "Somethingwet, No. 56 van 1996"
 
     act_match = None
     law_description = None
@@ -245,60 +246,60 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                 law_number = int(act_match.group(2))
                 law_year = int(act_match.group(3))
             else:
-                # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
-                act_pattern_with_year = re.compile(
-                    r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)",
+                # Try alternative English format with "Act No." or "No." or just "Act"
+                act_pattern_alternative = re.compile(
+                    r"^(.+?)\s+Act\s*\((?:Act\s+)?(?:No\.?\s*)?(\d+)\s+of\s+(\d{4})\)",
                     re.IGNORECASE,
                 )
-                act_match = act_pattern_with_year.search(content)
+                act_match = act_pattern_alternative.search(content)
 
                 if act_match:
                     law_description = act_match.group(1).strip()
-                    law_year = int(act_match.group(2))
-                    law_number = int(act_match.group(3))
+                    law_number = int(act_match.group(2))
+                    law_year = int(act_match.group(3))
                 else:
-                    # Try alternative English format with "Act No." or "No." or just "Act"
-                    act_pattern_alternative = re.compile(
-                        r"^(.+?)\s+Act\s*\((?:Act\s+)?(?:No\.?\s*)?(\d+)\s+of\s+(\d{4})\)",
+                    # Try format with abbreviation: "Something Act (abbreviation), Act No. 70 of 1970"
+                    act_pattern_with_abbrev = re.compile(
+                        r"^(.+?)\s+Act\s*\([^)]+\),\s*Act\s+No\.?\s*(\d+)\s+of\s+(\d{4})",
                         re.IGNORECASE,
                     )
-                    act_match = act_pattern_alternative.search(content)
+                    act_match = act_pattern_with_abbrev.search(content)
 
                     if act_match:
                         law_description = act_match.group(1).strip()
                         law_number = int(act_match.group(2))
                         law_year = int(act_match.group(3))
                     else:
-                        # Try Afrikaans format - Wet at the beginning
-                        act_pattern_afrikaans = re.compile(
-                            r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
+                        # Try format with year after Act: "Something Act, 2002 (Act No. 71 of 2002)"
+                        act_pattern_with_year = re.compile(
+                            r"^(.+?)\s+Act,\s*(\d{4})\s*\((?:Act\s+)?No\.?\s*(\d+)\s+of\s+\d{4}\)",
+                            re.IGNORECASE,
                         )
-                        act_match = act_pattern_afrikaans.search(content)
+                        act_match = act_pattern_with_year.search(content)
 
                         if act_match:
-                            # For Afrikaans format, prepend "Wet" to the description
-                            law_description = "Wet " + act_match.group(1).strip()
-                            law_number = int(act_match.group(2))
-                            law_year = int(act_match.group(3))
+                            law_description = act_match.group(1).strip()
+                            law_year = int(act_match.group(2))
+                            law_number = int(act_match.group(3))
                         else:
-                            # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
-                            act_pattern_afrikaans_no_parens = re.compile(
-                                r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})",
-                                re.IGNORECASE,
+                            # Try Afrikaans format - Wet at the beginning
+                            act_pattern_afrikaans = re.compile(
+                                r"^Wet\s+(.+?)\s*\((\d+)/(\d{4})\)", re.IGNORECASE
                             )
-                            act_match = act_pattern_afrikaans_no_parens.search(content)
+                            act_match = act_pattern_afrikaans.search(content)
 
                             if act_match:
-                                law_description = act_match.group(1).strip()
+                                # For Afrikaans format, prepend "Wet" to the description
+                                law_description = "Wet " + act_match.group(1).strip()
                                 law_number = int(act_match.group(2))
                                 law_year = int(act_match.group(3))
                             else:
-                                # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
-                                act_pattern_afrikaans_with_parens = re.compile(
-                                    r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)",
+                                # Try Afrikaans format ending in "wet" without parentheses: "Somethingwet, No. 56 van 1996"
+                                act_pattern_afrikaans_no_parens = re.compile(
+                                    r"^(.+?wet),\s*No\.?\s*(\d+)\s+van\s+(\d{4})",
                                     re.IGNORECASE,
                                 )
-                                act_match = act_pattern_afrikaans_with_parens.search(
+                                act_match = act_pattern_afrikaans_no_parens.search(
                                     content
                                 )
 
@@ -306,6 +307,22 @@ def _parse_single_entry(logical_line: str) -> Optional[dict[str, Any]]:
                                     law_description = act_match.group(1).strip()
                                     law_number = int(act_match.group(2))
                                     law_year = int(act_match.group(3))
+                                else:
+                                    # Try Afrikaans format ending in "wet" with parentheses: "Somethingwet (No. 56 van 1996)"
+                                    act_pattern_afrikaans_with_parens = re.compile(
+                                        r"^(.+?wet)\s*\((?:No\.?\s*)?(\d+)\s+van\s+(\d{4})\)",
+                                        re.IGNORECASE,
+                                    )
+                                    act_match = (
+                                        act_pattern_afrikaans_with_parens.search(
+                                            content
+                                        )
+                                    )
+
+                                    if act_match:
+                                        law_description = act_match.group(1).strip()
+                                        law_number = int(act_match.group(2))
+                                        law_year = int(act_match.group(3))
 
     if act_match:
         # Extract the notice description (everything after the Act info)
